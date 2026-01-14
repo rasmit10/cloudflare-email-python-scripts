@@ -20,18 +20,38 @@ from datetime import datetime
 
 import CFScriptConfig as CFG
 
-# -----------------------------------------------------------
-# API BASE + SESSION
-# -----------------------------------------------------------
-
 SETTINGS_BASE = CFG.API_BASE_URL + "/settings"
 
-session = requests.Session()
-session.headers.update({
-    "X-Auth-Email": CFG.AUTH_EMAIL,
-    "X-Auth-Key": CFG.AUTH_KEY,
-    "Content-Type": "application/json"
-})
+def block_sender(pattern, pattern_type, case_number):
+    # Cloudflare handles regex internally — NO regex flag needed
+        is_regex = False
+
+        comment = f"{datetime.utcnow().strftime('%Y/%m/%d')} - {case_number}"
+
+        body = {
+            "pattern": pattern,
+            "pattern_type": pattern_type,
+            "is_regex": is_regex,
+            "comments": comment
+        }
+
+        # -----------------------------------------------------------
+        # SEND API REQUEST
+        # -----------------------------------------------------------
+
+        url = f"{SETTINGS_BASE}/block_senders"
+        resp = CFG.session.post(url, json=body, timeout=10)
+
+
+        try:
+            data = resp.json()
+        except Exception:
+            data = {}
+
+        result = data.get("result")
+        return result
+
+       
 
 
 if __name__ == "__main__":
@@ -69,31 +89,7 @@ if __name__ == "__main__":
         print("Invalid choice. Defaulting to EMAIL.")
         pattern_type = "EMAIL"
 
-    # Cloudflare handles regex internally — NO regex flag needed
-    is_regex = False
-
-    comment = f"{datetime.utcnow().strftime('%Y/%m/%d')} - {case_number}"
-
-    body = {
-        "pattern": pattern,
-        "pattern_type": pattern_type,
-        "is_regex": is_regex,
-        "comments": comment
-    }
-
-    # -----------------------------------------------------------
-    # SEND API REQUEST
-    # -----------------------------------------------------------
-
-    url = f"{SETTINGS_BASE}/block_senders"
-    resp = session.post(url, json=body, timeout=10)
-
-    if resp.status_code not in (200, 201):
-        print("\n❌ Failed to create blocked sender:")
-        print(resp.text)
-        sys.exit(1)
-
-    result = resp.json().get("result")
+    result= block_sender(pattern, ptype, case_number)
 
     # -----------------------------------------------------------
     # OUTPUT

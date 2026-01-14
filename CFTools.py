@@ -55,16 +55,17 @@ def args_run():
     
     # add entry to block list
     elif(args.block):
-        if not args.comment:
-            print("\n[error] note is required when adding entry to block list")
+        if not args.case_number:
+            print("\n[error] case number is required when adding entry to block list")
             return
         if args.sender:
-            res = CFBlock.add_entry_to_blocklist(args.comment, sender=args.sender)
+            res = CFBlock.block_sender(args.sender, "EMAIL", args.case_number)
         elif args.domain:
-            res = CFBlock.add_entry_to_blocklist(args.comment, domain=args.domain)
+            res = CFBlock.block_sender(args.sender, "DOMAIN", args.case_number)
         else:
             print("\n[error] sender or domain is required when adding entry to block list")
             return
+        
         print(f"\n[success] added {res['pattern']} to block list with comment {res['comments']}.")
 
 if __name__ == "__main__":
@@ -79,7 +80,7 @@ if __name__ == "__main__":
     parser.add_argument('--domain', action='store', dest='domain', default=None, help='The sender domain.')
     parser.add_argument('--query', action='store', dest='query', default=None, help='A more advanced query to search for, analogous to the keyword search in the GUI')
     parser.add_argument('--out', action='store', dest='out', default=None, help='The output filepath for the query results.')
-    parser.add_argument('-c', '--comment', action='store', dest='comment', help='The comment to add to the block list entry. Typical format: YYYY/MM/DD - SIR#')
+    parser.add_argument('-c', '--case_number', action='store', dest='case_number', help='The case number of the SIR the sender is being blocked for. Used to generate the block list comment.')
     args = parser.parse_args()
 
     if args.search or args.block:
