@@ -8,32 +8,16 @@ Cloudflare BULK MOVE
 """
 
 import requests
-from dotenv import load_dotenv
-from pathlib import Path
 import csv
 import json
 
-import os
+import CFSearchConfig as CFG
 
-# -----------------------------------------------------------
-# LOAD ENVIRONMENT
-# -----------------------------------------------------------
-
-env_path = Path(__file__).resolve().parent / ".env"
-load_dotenv(env_path)
-
-ACCOUNT_ID = os.getenv("CF_ACCOUNT_ID")
-AUTH_EMAIL = os.getenv("CLOUDFLARE_EMAIL")
-AUTH_KEY = os.getenv("CLOUDFLARE_API_KEY")
-
-API_BASE_URL = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/email-security/investigate"
-TIMEOUT = 10
+url = CFG.API_BASE_URL + "/investigate"
 
 # -----------------------------
 # CONFIG — EDIT THESE
 # -----------------------------
-
-
 DESTINATION = "RecoverableItemsDeletions"     # Options["Inbox", "JunkEmail", "DeletedItems", "RecoverableItemsDeletions", "RecoverableItemsPurges"]
 
 INPUT_FILE = r"inputfile.csv " #<---change this
@@ -59,12 +43,12 @@ with open(OUTPUT_FILE, "w", newline="") as csvfile:
     for postfix_id in postfix_ids:
         print(f"Moving {postfix_id} → {DESTINATION} ... ", end="")
 
-        url = f"{API_BASE_URL}/{postfix_id}/move"
+        url = f"{url}/{postfix_id}/move"
         body = {"destination": DESTINATION}
 
         headers = {
-            "X-Auth-Email": AUTH_EMAIL,
-            "X-Auth-Key": AUTH_KEY,
+            "X-Auth-Email": CFG.AUTH_EMAIL,
+            "X-Auth-Key": CFG.AUTH_KEY,
             "Content-Type": "application/json",
         }
 

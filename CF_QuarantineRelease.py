@@ -10,24 +10,8 @@ CLOUDLFARE - RELEASE FROM QUARANTINE
 import requests
 import json
 import sys
-from pathlib import Path
-from dotenv import load_dotenv
-import os
 
-# -----------------------------------------------------------
-# LOAD ENV 
-# -----------------------------------------------------------
-
-env_path = Path(__file__).resolve().parent / ".env"
-load_dotenv(env_path)
-
-ACCOUNT_ID = os.getenv("CF_ACCOUNT_ID")
-AUTH_EMAIL = os.getenv("CLOUDFLARE_EMAIL")
-AUTH_KEY = os.getenv("CLOUDFLARE_API_KEY")
-
-if not ACCOUNT_ID or not AUTH_EMAIL or not AUTH_KEY:
-    print("Missing required environment variables in .env file.")
-    sys.exit(1)
+import CFSearchConfig as CFG
 
 # -----------------------------------------------------------
 # USER CONFIG — TXT INPUT FILE
@@ -56,11 +40,11 @@ print("Releasing from quarantine...\n")
 # API REQUEST
 # -----------------------------------------------------------
 
-url = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/email-security/investigate/release"
+url = CFG.API_BASE_URL + f"/investigate/release"
 
 headers = {
-    "X-Auth-Email": AUTH_EMAIL,
-    "X-Auth-Key": AUTH_KEY,
+    "X-Auth-Email": CFG.AUTH_EMAIL,
+    "X-Auth-Key": CFG.AUTH_KEY,
     "Content-Type": "application/json",
 }
 
