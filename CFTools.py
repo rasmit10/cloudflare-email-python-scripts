@@ -8,6 +8,7 @@ import argparse
 import CFFullSearch as CFSearch
 import CF_BlockSender as CFBlock
 import CFScriptConfig as CFG
+import CF_RECLASS as CFReclass
 
 # ---------------------------
 # CLI run based off passed arugments
@@ -72,6 +73,18 @@ def args_run():
         
         print(f"\n[success] added {res['pattern']} to block list with comment {res['comments']}.")
         return
+    
+    #reclassify a message
+    elif(args.reclassify):
+        if(not args.disposition or not args.postfix):
+            print("\n[error] postifx and disposition are required to reclassify a message")
+            return
+        res = CFReclass.reclassify_message(args.postfix, args.disposition)
+        
+        if(res.status_code == 202):
+            print(f'\n[success] message submitted with disposition: {args.disposition}')
+        else:
+            print(res)
 
 if __name__ == "__main__":
     #parse for command line arguments
@@ -86,10 +99,13 @@ if __name__ == "__main__":
     parser.add_argument('--query', action='store', dest='query', default=None, help='A more advanced query to search for, analogous to the keyword search in the GUI')
     parser.add_argument('--out', action='store', dest='out', default=None, help='The output filepath for the query results.')
     parser.add_argument('-c', '--case_number', action='store', dest='case_number', help='The case number of the SIR the sender is being blocked for. Used to generate the block list comment.')
+    parser.add_argument('-r', "--reclassify", action='store_true', dest='reclassify', help="Reclassify a message. Disposition and PostFix ID are required for reclassifications.")
+    parser.add_argument("--postfix", action='store', dest='postfix', help='The postix ID of the message.')
+    parser.add_argument('--disposition', action='store', dest='disposition', help='The desired disposition of a message. Options: NONE | BULK | MALICIOUS | SPAM | SPOOF | SUSPICIOUS')
     args = parser.parse_args()
 
-    if args.search or args.block:
+    if args.search or args.block or args.reclassify:
         args_run()
     else:
-        print("Please use either a search or block argument. Run with -h for help.")
+        print("Please use either an argument to specify action. Run with -h for help.")
         
