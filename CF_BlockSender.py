@@ -17,6 +17,7 @@ Prompts user for pattern, pattern_type, and case number.
 import sys
 import requests
 from datetime import datetime
+import time
 
 import CFScriptConfig as CFG
 
@@ -24,32 +25,52 @@ SETTINGS_BASE = CFG.API_BASE_URL + "/settings"
 
 def block_sender(pattern, pattern_type, case_number):
     # Cloudflare handles regex internally — NO regex flag needed
-        is_regex = False
+    is_regex = False
 
-        comment = f"{datetime.utcnow().strftime('%Y/%m/%d')} - {case_number}"
+    comment = f"{datetime.utcnow().strftime('%Y/%m/%d')} - {case_number}"
 
-        body = {
-            "pattern": pattern,
-            "pattern_type": pattern_type,
-            "is_regex": is_regex,
-            "comments": comment
-        }
+    body = {
+        "pattern": pattern,
+        "pattern_type": pattern_type,
+        "is_regex": is_regex,
+        "comments": comment
+    }
 
-        # -----------------------------------------------------------
-        # SEND API REQUEST
-        # -----------------------------------------------------------
+    # -----------------------------------------------------------
+    # SEND API REQUEST
+    # -----------------------------------------------------------
 
-        url = f"{SETTINGS_BASE}/block_senders"
-        resp = CFG.session.post(url, json=body, timeout=10)
+    url = f"{SETTINGS_BASE}/block_senders"
 
-
+    last_exc = None
+    for attempt in range(CFG.MAX_RETRIES):
         try:
-            data = resp.json()
-        except Exception:
-            data = {}
+            print(f"Making request to {url}")
+            resp = CFG.session.post(url, json=body, timeout=CFG.TIMEOUT)
+            print(resp)
+        except requests.RequestException as e:
+            last_exc = e
+            time.sleep((2 ** attempt) * 0.5)
+            continue
 
-        result = data.get("result")
-        return result
+        if resp.status_code == 201:
+            try:
+                data = resp.json()
+            except Exception:
+                data = {}
+            result = data.get("result")
+            return result
+
+        if resp.status_code in (429, 500, 502, 503, 504):
+            time.sleep((2 ** attempt) * 0.5 + CFG.RATE_LIMIT_SLEEP)
+            last_exc = Exception(f"Transient HTTP {resp.status_code}")
+            continue
+
+        raise Exception(f"API error {resp.status_code}: {resp.text}")
+
+    raise last_exc if last_exc else Exception("Unknown request failure")
+
+
 
        
 

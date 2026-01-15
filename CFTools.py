@@ -48,25 +48,30 @@ def args_run():
             ok, written = CFSearch.export_csv_and_validate(out_csv, items)
             if ok:
                 print(f"\n[success] CSV exported to {out_csv} with {written} rows (matches collected count).")
+                return
             else:
                 print(f"\n[warning] CSV exported to {out_csv} with {written} rows (MAY NOT MATCH collected count {len(items)}). See debug/ for diagnostics.")
+                return
         else:
             print("\n[success] Search returned 0 results. No CSV output to write.")
+            return
     
     # add entry to block list
     elif(args.block):
+        res = {}
         if not args.case_number:
             print("\n[error] case number is required when adding entry to block list")
             return
         if args.sender:
             res = CFBlock.block_sender(args.sender, "EMAIL", args.case_number)
         elif args.domain:
-            res = CFBlock.block_sender(args.sender, "DOMAIN", args.case_number)
+            res = CFBlock.block_sender(args.domain, "DOMAIN", args.case_number)
         else:
             print("\n[error] sender or domain is required when adding entry to block list")
             return
         
         print(f"\n[success] added {res['pattern']} to block list with comment {res['comments']}.")
+        return
 
 if __name__ == "__main__":
     #parse for command line arguments
