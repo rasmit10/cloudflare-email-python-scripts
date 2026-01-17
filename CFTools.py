@@ -11,102 +11,116 @@ import CFScriptConfig as CFG
 import CF_RECLASS as CFReclass
 
 # ---------------------------
-# CLI run based off passed arugments
+# Search for emails using arguments
 # ---------------------------
-def args_run():
-    #run search
-    if(args.search):
-        # search off message ID
-        if args.id != None:
-            print(args.id)
-            items, meta = CFSearch.fetch_by_message_id(args.id, per_page=CFG.PER_PAGE, preserve_duplicates=True)
-            print(f"[done] message-id fetch collected {len(items)} items; meta={meta}")
-        
-        # search off sender, recipient, or domain
-        else:
-            end_dt = datetime.now(timezone.utc).replace(tzinfo=timezone.utc)
-            start_dt = (end_dt - timedelta(days=int(args.days))).replace(tzinfo=timezone.utc)
-            start_iso = CFSearch._iso(start_dt)
-            end_iso = CFSearch._iso(end_dt)
-
-            print(f"[search] start={start_iso} end={end_iso} per_page={CFG.PER_PAGE}")
-            items, meta = CFSearch.fetch_all_by_time_divide_and_conquer(start_iso, end_iso, subject=args.subject, sender=args.sender, recipient=args.recipient, domain=args.domain, query=args.query, per_page=CFG.PER_PAGE)
-            print(f"[done] collected {len(items)} items; meta={meta}")
-        
-        # items returned by search
-        if len(items) > 0:
-            # parse output path cf_investigate_timestamp.csv
-            default_csv = Path.cwd() / f"cf_investigate_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.csv"
-            if not args.out:
-                out_csv = str(default_csv)
-            else:
-                p = Path(args.out).expanduser()
-                if not p.suffix:
-                    p = p.with_suffix(".csv")
-                out_csv = str(p)
-
-            #write output
-            ok, written = CFSearch.export_csv_and_validate(out_csv, items)
-            if ok:
-                print(f"\n[success] CSV exported to {out_csv} with {written} rows (matches collected count).")
-                return
-            else:
-                print(f"\n[warning] CSV exported to {out_csv} with {written} rows (MAY NOT MATCH collected count {len(items)}). See debug/ for diagnostics.")
-                return
-        else:
-            print("\n[success] Search returned 0 results. No CSV output to write.")
-            return
+def arg_search(args):
+    # search off message ID
+    if args.id != None:
+        print(args.id)
+        items, meta = CFSearch.fetch_by_message_id(args.id, per_page=CFG.PER_PAGE, preserve_duplicates=True)
+        print(f"[done] message-id fetch collected {len(items)} items; meta={meta}")
     
-    # add entry to block list
-    elif(args.block):
-        res = {}
-        if not args.case_number:
-            print("\n[error] case number is required when adding entry to block list")
-            return
-        if args.sender:
-            res = CFBlock.block_sender(args.sender, "EMAIL", args.case_number)
-        elif args.domain:
-            res = CFBlock.block_sender(args.domain, "DOMAIN", args.case_number)
+    # search off sender, recipient, or domain
+    else:
+        end_dt = datetime.now(timezone.utc).replace(tzinfo=timezone.utc)
+        start_dt = (end_dt - timedelta(days=int(args.days))).replace(tzinfo=timezone.utc)
+        start_iso = CFSearch._iso(start_dt)
+        end_iso = CFSearch._iso(end_dt)
+
+        print(f"[search] start={start_iso} end={end_iso} per_page={CFG.PER_PAGE}")
+        items, meta = CFSearch.fetch_all_by_time_divide_and_conquer(start_iso, end_iso, subject=args.subject, sender=args.sender, recipient=args.recipient, domain=args.domain, query=args.query, per_page=CFG.PER_PAGE)
+        print(f"[done] collected {len(items)} items; meta={meta}")
+    
+    # items returned by search
+    if len(items) > 0:
+        # parse output path cf_investigate_timestamp.csv
+        default_csv = Path.cwd() / f"cf_investigate_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.csv"
+        if not args.out:
+            out_csv = str(default_csv)
         else:
-            print("\n[error] sender or domain is required when adding entry to block list")
+            p = Path(args.out).expanduser()
+            if not p.suffix:
+                p = p.with_suffix(".csv")
+            out_csv = str(p)
+
+        #write output
+        ok, written = CFSearch.export_csv_and_validate(out_csv, items)
+        if ok:
+            print(f"\n[success] CSV exported to {out_csv} with {written} rows (matches collected count).")
             return
-        
-        print(f"\n[success] added {res['pattern']} to block list with comment {res['comments']}.")
+        else:
+            print(f"\n[warning] CSV exported to {out_csv} with {written} rows (MAY NOT MATCH collected count {len(items)}). See debug/ for diagnostics.")
+            return
+    else:
+        print("\n[success] Search returned 0 results. No CSV output to write.")
+        return
+
+# ---------------------------
+# Add an entry to the block list using arguments
+# ---------------------------
+def arg_block(args):
+    res = {}
+    if not args.case_number:
+        print("\n[error] case number is required when adding entry to block list")
+        return
+    if args.sender:
+        res = CFBlock.block_sender(args.sender, "EMAIL", args.case_number)
+    elif args.domain:
+        res = CFBlock.block_sender(args.domain, "DOMAIN", args.case_number)
+    else:
+        print("\n[error] sender or domain is required when adding entry to block list")
         return
     
+    print(f"\n[success] added {res['pattern']} to block list with comment {res['comments']}.")
+    return
+
+# ---------------------------
+# Submit a reclassification using arguments
+# ---------------------------
+def arg_reclassify(args):
     #reclassify a message
-    elif(args.reclassify):
-        if(not args.disposition or not args.postfix):
-            print("\n[error] postifx and disposition are required to reclassify a message")
-            return
-        res = CFReclass.reclassify_message(args.postfix, args.disposition)
-        
-        if(res.status_code == 202):
-            print(f'\n[success] message submitted with disposition: {args.disposition}')
-        else:
-            print(res)
+    if(not args.disposition or not args.postfix):
+        print("\n[error] postifx and disposition are required to reclassify a message")
+        return
+    res = CFReclass.reclassify_message(args.postfix, args.disposition.upper())
+    
+    if(res.status_code == 202):
+        print(f'\n[success] message submitted with disposition: {args.disposition}')
+    else:
+        print(res)
+
 
 if __name__ == "__main__":
     #parse for command line arguments
-    parser = argparse.ArgumentParser(description="Uses the Cloudflare API to search for messages and save the results as a CSV file. Use the following arguments to specify search peramaters or run without arguments for an interactive prompt.")
-    parser.add_argument('-s', '--search', action='store_true', dest='search', help='Search for emails based on the arguments you provided. Use the other flags to provide search perameters.')
-    parser.add_argument("-b", '--block', action="store_true", dest='block', help="Add a sender to the cloudflare block list. Use the sender or domain flag to specify what to block and the note flag to specify the block note.")
-    parser.add_argument('--id', action='store', dest='id', default=None, help='The message ID of the email in double quotes ("<id>")')
-    parser.add_argument('--days', action='store', dest='days', default=30, help='The number of days to search back. Defaults to 30 days')
-    parser.add_argument('--subject', action='store', dest='subject', default=None, help='The subject of the email.')
-    parser.add_argument('--sender', action='store', dest='sender', default=None, help='The sender of the email.')
-    parser.add_argument('--domain', action='store', dest='domain', default=None, help='The sender domain.')
-    parser.add_argument('--query', action='store', dest='query', default=None, help='A more advanced query to search for, analogous to the keyword search in the GUI')
-    parser.add_argument('--out', action='store', dest='out', default=None, help='The output filepath for the query results.')
-    parser.add_argument('-c', '--case_number', action='store', dest='case_number', help='The case number of the SIR the sender is being blocked for. Used to generate the block list comment.')
-    parser.add_argument('-r', "--reclassify", action='store_true', dest='reclassify', help="Reclassify a message. Disposition and PostFix ID are required for reclassifications.")
-    parser.add_argument("--postfix", action='store', dest='postfix', help='The postix ID of the message.')
-    parser.add_argument('--disposition', action='store', dest='disposition', help='The desired disposition of a message. Options: NONE | BULK | MALICIOUS | SPAM | SPOOF | SUSPICIOUS')
-    parser.add_argument('--recipient', action='store', dest='recipient', default=None, help='The recipient of the email.')
-    args = parser.parse_args()
+    parser = argparse.ArgumentParser(description='Uses the Cloudflare API to search for messages and save the results as a CSV file. Use the subcommands below to specify an action.')
+    subparser = parser.add_subparsers()
 
-    if args.search or args.block or args.reclassify:
-        args_run()
-    else:
-        print("Please use either an argument to specify action. Run with -h for help.")
-        
+    #define search parser and arguments
+    search_parser = subparser.add_parser('search', help='Search Cloudflare for emails.')
+    search_parser.set_defaults(func=arg_search)
+    search_parser.add_argument('--id', action='store', dest='id', default=None, help='The message ID of the email in double quotes ("<id>")')
+    search_parser.add_argument('--days', action='store', dest='days', default=30, help='The number of days to search back. Defaults to 30 days')
+    search_parser.add_argument('--subject', action='store', dest='subject', default=None, help='The subject of the email.')
+    search_parser.add_argument('-s', '--sender', action='store', dest='sender', default=None, help='The sender of the email.')
+    search_parser.add_argument('-r', '--recipient', action='store', dest='recipient', default=None, help='The recipient of the email.')
+    search_parser.add_argument('-d', '--domain', action='store', dest='domain', default=None, help='The sender domain.')
+    search_parser.add_argument('--query', action='store', dest='query', default=None, help='A more advanced query to search for, analogous to the keyword search in the GUI')
+    search_parser.add_argument('-o','--out', action='store', dest='out', default=None, help='The output filepath for the query results.')
+
+
+    #define block parser and arguments
+    block_parser = subparser.add_parser('block', help='Add a sender to the Cloudflare block list.')
+    block_parser.set_defaults(func=arg_block)
+    block_parser.add_argument('-s', '--sender', action='store', dest='sender', default=None, help='The sender to block.')
+    block_parser.add_argument('-d', '--domain', action='store', dest='domain', default=None, help='The sender domain to block.')
+    block_parser.add_argument('-c', '--case_number', action='store', dest='case_number', help='The case number of the SIR the sender is being blocked for. Used to generate the block list comment.', required=True)
+
+
+    #define reclassify parser and arguments
+    reclassify_parser = subparser.add_parser('reclassify', help='Submit a message to Cloudflare for reclassification.')
+    reclassify_parser.add_argument('-p', "--postfix", action='store', dest='postfix', help='The postix ID of the message.', required=True)
+    reclassify_parser.add_argument('-d', '--disposition', action='store', dest='disposition', choices=['none', 'bulk', 'malicious', 'spam', 'spoof', 'suspicious'], help='The desired disposition of a message. Options: NONE | BULK | MALICIOUS | SPAM | SPOOF | SUSPICIOUS', required=True)
+
+    #parse arguments and run the correct function
+    args = parser.parse_args()
+    args.func(args)
