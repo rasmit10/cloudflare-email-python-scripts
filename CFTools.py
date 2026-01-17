@@ -9,12 +9,13 @@ import CFFullSearch as CFSearch
 import CF_BlockSender as CFBlock
 import CFScriptConfig as CFG
 import CF_RECLASS as CFReclass
+import CF_BULKMOVE as CFBulkMove
 
 # ---------------------------
 # Search for emails using arguments
 # ---------------------------
 def arg_search(args):
-    if not any((args.sender, args.id, args.subject, args.domain, args.query)):
+    if not any((args.sender, args.id, args.subject, args.domain, args.query, args.recipient)):
         print("[error] no search criteria specified. Run \'CFTools.py search -h\' for help. ")
         return
     # search off message ID
@@ -92,6 +93,9 @@ def arg_reclassify(args):
     else:
         print(res)
 
+def arg_move(args):
+    CFBulkMove.bulk_move(args.destination, args.input_file, args.output_file)
+
 
 if __name__ == "__main__":
     #parse for command line arguments
@@ -121,8 +125,16 @@ if __name__ == "__main__":
 
     #define reclassify parser and arguments
     reclassify_parser = subparser.add_parser('reclassify', help='Submit a message to Cloudflare for reclassification.')
+    reclassify_parser.set_defaults(func=arg_reclassify)
     reclassify_parser.add_argument('-p', "--postfix", action='store', dest='postfix', help='The postix ID of the message.', required=True)
     reclassify_parser.add_argument('-d', '--disposition', action='store', dest='disposition', choices=['none', 'bulk', 'malicious', 'spam', 'spoof', 'suspicious'], help='The desired disposition of a message. Options: NONE | BULK | MALICIOUS | SPAM | SPOOF | SUSPICIOUS', required=True)
+
+    #define move parser and add arguments
+    move_parser = subparser.add_parser('move', help='Move a list of messages to a different folder.')
+    move_parser.set_defaults(func=arg_move)
+    move_parser.add_argument('-d', '--destination', action='store', dest="destination", choices=["Inbox", "JunkEmail", "DeletedItems", "RecoverableItemsDeletions", "RecoverableItemsPurges"], help='The destination folder to move the messages to. Options: Inbox | JunkEmail | DeletedItems | RecoverableItemsDeletions | RecoverableItemsPurges', required=True)
+    move_parser.add_argument('-i', '--input_file', action='store', dest='input_file', help='The path of the input CSV, should contain one column with the postfix IDs and no other information.', required=True)
+    move_parser.add_argument('-o', '--output_file', action='store', dest='output_file', help="The file path to output the results csv to. Default is move_results.csv", default="move_results.csv")
 
     #parse arguments and run the correct function
     args = parser.parse_args()
