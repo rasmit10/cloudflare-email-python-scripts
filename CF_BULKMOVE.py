@@ -7,7 +7,7 @@ Cloudflare BULK MOVE
 @author: rasmit10
 """
 
-import requests
+import time
 import csv
 import json
 
@@ -42,32 +42,47 @@ def bulk_move(destination, in_file, out_file):
 
         # Process each ID one-by-one
         for postfix_id in postfix_ids:
-            print(f"Moving {postfix_id} → {destination} ... ", end="")
+            print(f"Moving {postfix_id} → {destination} ... ")
 
             url = f"{url}/{postfix_id}/move"
             body = {"destination": destination}
 
-            headers = {
-                "X-Auth-Email": CFG.AUTH_EMAIL,
-                "X-Auth-Key": CFG.AUTH_KEY,
-                "Content-Type": "application/json",
-            }
+            success = ""
+            error_msg = ""
+            data = {}
 
-            response = CFG.session.post(url, json=body)
+            for attempt in range(CFG.MAX_RETRIES):
+                print(f'Attempt {attempt} ... ', end=" ")
+                response = CFG.session.post(url, json=body, timeout=CFG.TIMEOUT)
 
-            try:
-                data = response.json()
-            except:
-                data = {"error": "Non-JSON response", "raw": response.text}
+                if response.status_code == 200:
+                    try:
+                        data = response.json()
+                    except:
+                        data = {"error": "Non-JSON response", "raw": response.text}
 
-            success = data.get("success", False)
-            error_msg = None
+                    success = data.get("success", False)
+                    error_msg = None
+                    print("OK\n")
 
-            # Cloudflare may return errors inside 'errors'
-            if isinstance(data, dict) and "errors" in data and data["errors"]:
-                error_msg = json.dumps(data["errors"])
+                    # Cloudflare may return errors inside 'errors'
+                    if isinstance(data, dict) and "errors" in data and data["errors"]:
+                        error_msg = json.dumps(data["errors"])
+                        time.sleep((2 ** attempt) * 0.5 + CFG.RATE_LIMIT_SLEEP)
+                        continue
+                    if success:
+                        break
+                elif response.status_code in (404, 422):
+                    print(f"FAILED: {response.status_code} - permanant failure, no retry.")
+                    error_msg = f"{response.status_code} - permanant failure, no retry."
+                    break   
+                else:
+                    print(f"FAILED: {response.status_code}")
+                    time.sleep((2 ** attempt) * 0.5 + CFG.RATE_LIMIT_SLEEP)
+                    continue
 
-            print("OK" if success else "FAILED")
+                
+                
 
             # Write row
             writer.writerow({
