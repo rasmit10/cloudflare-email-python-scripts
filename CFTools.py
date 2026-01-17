@@ -14,6 +14,9 @@ import CF_RECLASS as CFReclass
 # Search for emails using arguments
 # ---------------------------
 def arg_search(args):
+    if not any((args.sender, args.id, args.subject, args.domain, args.query)):
+        print("[error] no search criteria specified. Run \'CFTools.py search -h\' for help. ")
+        return
     # search off message ID
     if args.id != None:
         print(args.id)
@@ -59,17 +62,16 @@ def arg_search(args):
 # Add an entry to the block list using arguments
 # ---------------------------
 def arg_block(args):
-    res = {}
-    if not args.case_number:
-        print("\n[error] case number is required when adding entry to block list")
+    if not any((args.sender, args.domain)):
+        print("[error] Sender or domain is required to add an entry to the block list. Run \'CFTools.py block -h\' for help.")
         return
+
+    res = {}
     if args.sender:
         res = CFBlock.block_sender(args.sender, "EMAIL", args.case_number)
     elif args.domain:
         res = CFBlock.block_sender(args.domain, "DOMAIN", args.case_number)
-    else:
-        print("\n[error] sender or domain is required when adding entry to block list")
-        return
+
     
     print(f"\n[success] added {res['pattern']} to block list with comment {res['comments']}.")
     return
@@ -80,8 +82,9 @@ def arg_block(args):
 def arg_reclassify(args):
     #reclassify a message
     if(not args.disposition or not args.postfix):
-        print("\n[error] postifx and disposition are required to reclassify a message")
+        print("\n[error] postifx and disposition are required to reclassify a message. Run \'CFTools.py reclassify -h\' for help.")
         return
+    
     res = CFReclass.reclassify_message(args.postfix, args.disposition.upper())
     
     if(res.status_code == 202):
@@ -93,7 +96,7 @@ def arg_reclassify(args):
 if __name__ == "__main__":
     #parse for command line arguments
     parser = argparse.ArgumentParser(description='Uses the Cloudflare API to search for messages and save the results as a CSV file. Use the subcommands below to specify an action.')
-    subparser = parser.add_subparsers()
+    subparser = parser.add_subparsers(dest = 'command')
 
     #define search parser and arguments
     search_parser = subparser.add_parser('search', help='Search Cloudflare for emails.')
@@ -123,4 +126,9 @@ if __name__ == "__main__":
 
     #parse arguments and run the correct function
     args = parser.parse_args()
-    args.func(args)
+
+    if args.command:
+        args.func(args)
+    else:
+        print("[error] A subcommand is required. Printing help page:\n")
+        parser.print_help()
