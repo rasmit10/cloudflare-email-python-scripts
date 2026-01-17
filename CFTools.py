@@ -22,7 +22,7 @@ def args_run():
             items, meta = CFSearch.fetch_by_message_id(args.id, per_page=CFG.PER_PAGE, preserve_duplicates=True)
             print(f"[done] message-id fetch collected {len(items)} items; meta={meta}")
         
-        # search off sender or domain
+        # search off sender, recipient, or domain
         else:
             end_dt = datetime.now(timezone.utc).replace(tzinfo=timezone.utc)
             start_dt = (end_dt - timedelta(days=int(args.days))).replace(tzinfo=timezone.utc)
@@ -30,7 +30,7 @@ def args_run():
             end_iso = CFSearch._iso(end_dt)
 
             print(f"[search] start={start_iso} end={end_iso} per_page={CFG.PER_PAGE}")
-            items, meta = CFSearch.fetch_all_by_time_divide_and_conquer(start_iso, end_iso, subject=args.subject, sender=args.sender, domain=args.domain, query=args.query, per_page=CFG.PER_PAGE)
+            items, meta = CFSearch.fetch_all_by_time_divide_and_conquer(start_iso, end_iso, subject=args.subject, sender=args.sender, recipient=args.recipient, domain=args.domain, query=args.query, per_page=CFG.PER_PAGE)
             print(f"[done] collected {len(items)} items; meta={meta}")
         
         # items returned by search
@@ -102,6 +102,7 @@ if __name__ == "__main__":
     parser.add_argument('-r', "--reclassify", action='store_true', dest='reclassify', help="Reclassify a message. Disposition and PostFix ID are required for reclassifications.")
     parser.add_argument("--postfix", action='store', dest='postfix', help='The postix ID of the message.')
     parser.add_argument('--disposition', action='store', dest='disposition', help='The desired disposition of a message. Options: NONE | BULK | MALICIOUS | SPAM | SPOOF | SUSPICIOUS')
+    parser.add_argument('--recipient', action='store', dest='recipient', default=None, help='The recipient of the email.')
     args = parser.parse_args()
 
     if args.search or args.block or args.reclassify:

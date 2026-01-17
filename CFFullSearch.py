@@ -100,7 +100,7 @@ def _extract_cursor_from_next(next_val):
 # ---------------------------
 # Single page fetch with retries + debug (shared)
 # ---------------------------
-def _fetch_page(start_iso=None, end_iso=None, subject=None, sender=None, domain=None, query=None, per_page=CFG.PER_PAGE):
+def _fetch_page(start_iso=None, end_iso=None, subject=None, sender=None, recipient=None, domain=None, query=None, per_page=CFG.PER_PAGE):
     params = {"per_page": per_page, "detections_only": "false"}
     if start_iso:
         params["start"] = start_iso
@@ -116,6 +116,10 @@ def _fetch_page(start_iso=None, end_iso=None, subject=None, sender=None, domain=
             params["sender"] = sender
         if domain:
             params["domain"] = domain
+        if recipient:
+            params["recipient"] = recipient
+
+    print(params)
 
     last_exc = None
     for attempt in range(CFG.MAX_RETRIES):
@@ -230,7 +234,7 @@ def fetch_by_message_id(message_id, per_page=CFG.PER_PAGE, preserve_duplicates=T
 # ---------------------------
 # Deterministic divide-and-conquer fetcher (unchanged)
 # ---------------------------
-def fetch_all_by_time_divide_and_conquer(start_iso, end_iso, subject=None, sender=None, domain=None, query=None, per_page=CFG.PER_PAGE):
+def fetch_all_by_time_divide_and_conquer(start_iso, end_iso, subject=None, sender=None, recipient=None, domain=None, query=None, per_page=CFG.PER_PAGE):
     start_dt = _parse_iso_to_dt_or_none(start_iso)
     end_dt = _parse_iso_to_dt_or_none(end_iso)
     if not start_dt or not end_dt:
@@ -256,7 +260,7 @@ def fetch_all_by_time_divide_and_conquer(start_iso, end_iso, subject=None, sende
         if depth > CFG.MAX_RECURSION_DEPTH:
             print(f"[warn] max recursion depth ({CFG.MAX_RECURSION_DEPTH}) reached; fetching once: {s_dt} -> {e_dt}")
             try:
-                page, plen, ri = _fetch_page(_iso(s_dt), _iso(e_dt), subject=subject, sender=sender, domain=domain, query=query, per_page=per_page)
+                page, plen, ri = _fetch_page(_iso(s_dt), _iso(e_dt), subject=subject, sender=sender, recipient=recipient, domain=domain, query=query, per_page=per_page)
                 requests_made += 1
             except Exception as ex:
                 print("[error] request failed at max depth:", ex)
@@ -270,7 +274,7 @@ def fetch_all_by_time_divide_and_conquer(start_iso, end_iso, subject=None, sende
             return
 
         try:
-            page, plen, ri = _fetch_page(_iso(s_dt), _iso(e_dt), subject=subject, sender=sender, domain=domain, query=query, per_page=per_page)
+            page, plen, ri = _fetch_page(_iso(s_dt), _iso(e_dt), subject=subject, sender=sender, recipient=recipient, domain=domain, query=query, per_page=per_page)
             requests_made += 1
         except Exception as ex:
             print("[error] request failed:", ex)
