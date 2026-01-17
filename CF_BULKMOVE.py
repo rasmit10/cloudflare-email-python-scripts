@@ -73,8 +73,8 @@ def bulk_move(destination, in_file, out_file):
                     if success:
                         break
                 elif response.status_code in (404, 422):
-                    print(f"FAILED: {response.status_code} - permanant failure, no retry.")
-                    error_msg = f"{response.status_code} - permanant failure, no retry."
+                    print(f"FAILED: {response.status_code} - permanent failure, no retry.")
+                    error_msg = f"{response.status_code} - permanent failure, no retry."
                     break   
                 else:
                     print(f"FAILED: {response.status_code}")
