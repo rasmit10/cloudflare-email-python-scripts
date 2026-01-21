@@ -10,6 +10,7 @@ Cloudflare BULK MOVE
 import time
 import csv
 import json
+from pathlib import Path
 
 import CFScriptConfig as CFG
 
@@ -24,12 +25,39 @@ OUTPUT_FILE = "outputfile.csv" #<---change this
 
 # -----------------------------
 
+def read_postfix_id_csv(path):
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(path)
+    ids = []
+    with open(path, newline="", encoding="utf-8") as cf:
+        reader = csv.reader(cf)
+        rows = list(reader)
+    if not rows:
+        return []
+    header = [c.strip().lower() for c in rows[0]]
+    candidate_cols = None
+    for name in ("postfix_id", "postfix-id", "postfix indent"):
+        if name in header:
+            candidate_cols = header.index(name)
+            start_row = 1
+            break
+    if candidate_cols is None:
+        candidate_cols = 0
+        start_row = 0
+    for r in rows[start_row:]:
+        if len(r) <= candidate_cols:
+            continue
+        v = r[candidate_cols].strip()
+        if v:
+            ids.append(v)
+    return ids
+
 def bulk_move(destination, in_file, out_file):
     url = CFG.API_BASE_URL + "/investigate"
     
     # Read postfix IDs
-    with open(in_file, "r") as f:
-        postfix_ids = [line.strip() for line in f if line.strip()]
+    postfix_ids = read_postfix_id_csv(in_file)
 
     print(f"Loaded {len(postfix_ids)} postfix IDs")
 
