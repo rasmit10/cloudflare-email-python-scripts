@@ -4,36 +4,16 @@ Created on Thu Dec  4 09:00:35 2025
 
 Cloudflare BULK MOVE
 
-@author: rasmit10
 """
 
-import requests
-from dotenv import load_dotenv
-from pathlib import Path
 import csv
-import json
+from pathlib import Path
+import CFScriptConfig as CFG
 
-import os
-
-# -----------------------------------------------------------
-# LOAD ENVIRONMENT
-# -----------------------------------------------------------
-
-env_path = Path(__file__).resolve().parent / ".env"
-load_dotenv(env_path)
-
-ACCOUNT_ID = os.getenv("CF_ACCOUNT_ID")
-AUTH_EMAIL = os.getenv("CLOUDFLARE_EMAIL")
-AUTH_KEY = os.getenv("CLOUDFLARE_API_KEY")
-
-API_BASE_URL = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/email-security/investigate"
-TIMEOUT = 10
 
 # -----------------------------
 # CONFIG — EDIT THESE
 # -----------------------------
-
-
 DESTINATION = "RecoverableItemsDeletions"     # Options["Inbox", "JunkEmail", "DeletedItems", "RecoverableItemsDeletions", "RecoverableItemsPurges"]
 
 INPUT_FILE = r"inputfile.csv " #<---change this
@@ -41,58 +21,125 @@ OUTPUT_FILE = "outputfile.csv" #<---change this
 
 # -----------------------------
 
+def read_postfix_id_csv(path):
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(path)
+    ids = []
+    with open(path, newline="", encoding="utf-8-sig") as cf:
+        reader = csv.reader(cf)
+        rows = list(reader)
+    if not rows:
+        return []
+    header = [c.strip().lower() for c in rows[0]]
+    candidate_cols = None
+    for name in ("postfix_id", "postfix-id", "postfix indent"):
+        if name in header:
+            candidate_cols = header.index(name)
+            start_row = 1
+            break
+    if candidate_cols is None:
+        candidate_cols = 0
+        start_row = 0
+    for r in rows[start_row:]:
+        if len(r) <= candidate_cols:
+            continue
+        v = r[candidate_cols].strip()
+        if v:
+            ids.append(v)
+    return ids
 
-# Read postfix IDs
-with open(INPUT_FILE, "r") as f:
-    postfix_ids = [line.strip() for line in f if line.strip()]
+def bulk_move(destination, in_file, out_file):
+    url = CFG.API_BASE_URL + "/investigate/move"
+    
+    # Read postfix IDs
+    postfix_ids = read_postfix_id_csv(in_file)
 
-print(f"Loaded {len(postfix_ids)} postfix IDs")
+    print(f"Loaded {len(postfix_ids)} postfix IDs")
 
+    # ---------------------------
+    # Batch Purge Processing
+    # ---------------------------
+    batch_size = 100 
+    batch_count = 0
+    failed_batches = []   # Track failed batches for retry attempts
+    items = []
 
-# Prepare CSV output
-fieldnames = ["postfix_id", "http_status", "success", "error", "raw_response"]
-with open(OUTPUT_FILE, "w", newline="") as csvfile:
-    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-    writer.writeheader()
+    # Iterate through postfix IDs in chunks of batch_size
+    for i in range(0, len(postfix_ids), batch_size):
+        batch_count += 1
+        batch = postfix_ids[i:i + batch_size]
 
-    # Process each ID one-by-one
-    for postfix_id in postfix_ids:
-        print(f"Moving {postfix_id} → {DESTINATION} ... ", end="")
+        print(f"Moving batch {batch_count} to {destination}...")
 
-        url = f"{API_BASE_URL}/{postfix_id}/move"
-        body = {"destination": DESTINATION}
-
-        headers = {
-            "X-Auth-Email": AUTH_EMAIL,
-            "X-Auth-Key": AUTH_KEY,
-            "Content-Type": "application/json",
+        body = {
+        "destination": destination,
+        "postfix_ids": batch
         }
 
-        response = requests.post(url, headers=headers, json=body)
+        # Send purge request
+        response = CFG.session.post(url, json=body, timeout=CFG.TIMEOUT)
 
-        try:
-            data = response.json()
-        except:
-            data = {"error": "Non-JSON response", "raw": response.text}
+        if response:
+            print(f"Batch {batch_count} moved!")
+        if "result" in response.json():
+            for item in response.json()["result"]:
+                items.append(item) # store purge results per message
+        else:
+            failed_batches.append(batch_count - 1)  # store failed batch index
+            print(f"Problem with batch {batch_count} - {response.text}")
 
-        success = data.get("success", False)
-        error_msg = None
+    # ---------------------------
+    # Retry Logic For Failed Batches
+    # ---------------------------
 
-        # Cloudflare may return errors inside 'errors'
-        if isinstance(data, dict) and "errors" in data and data["errors"]:
-            error_msg = json.dumps(data["errors"])
+    if len(failed_batches) > 0:
+        print("\nRetrying failed batches...")
 
-        print("OK" if success else "FAILED")
+        for failure in failed_batches:
+            print(f"Retrying batch {failure + 1}")
 
-        # Write row
-        writer.writerow({
-            "postfix_id": postfix_id,
-            "http_status": response.status_code,
-            "success": success,
-            "error": error_msg,
-            "raw_response": json.dumps(data)
-        })
+        # Extract the same batch again
+        retry_batch = postfix_ids[failure * batch_size : (failure + 1) * batch_size]
 
-print(f"\nDone! Results written to {OUTPUT_FILE}")
+        # Retry each postfix_id individually
+        for id in retry_batch:
+            body = {
+            "destination": destination,
+            "postfix_ids": [id]
+            }
+
+            result, response = CFG.session.post(url, json=body, timeout=CFG.TIMEOUT)
+
+            if result:
+                print(f"Retry postfix_id {id} moved!")
+            if "result" in response.json():
+                for item in response.json()["result"]:
+                    items.append(item)
+            else:
+                print(f"Problem with postfix_id {item} - {response.text}")
+
+    # If there were "successful" purges, record the results
+    if len(items) > 0:
+        print(f"Saving move results to {out_file}")
+
+        fieldnames = [
+        "completed_timestamp", "success", "message_id", 
+        "recipient", "operation", "status", "destination"
+        ]
+
+        # Write purge results to CSV
+        with open(out_file, "w", newline='', encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=fieldnames, extrasaction='ignore')
+            writer.writeheader()
+            writer.writerows(items)
+            print(f"Results saved to {out_file}")
+
+    else:
+        print("No successful moves happened!")
+        
+
+if __name__ == "__main__":
+    bulk_move(DESTINATION, INPUT_FILE, OUTPUT_FILE)
 
 

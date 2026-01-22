@@ -14,110 +14,113 @@ Simple script to block a sender, domain, or IP in Cloudflare Email Security.
 Prompts user for pattern, pattern_type, and case number.
 """
 
-import os
 import sys
 import requests
 from datetime import datetime
-from pathlib import Path
-from dotenv import load_dotenv
+import time
 
-# -----------------------------------------------------------
-# LOAD ENVIRONMENT
-# -----------------------------------------------------------
+import CFScriptConfig as CFG
 
-env_path = Path(__file__).resolve().parent / ".env"
-load_dotenv(env_path)
+SETTINGS_BASE = CFG.API_BASE_URL + "/settings"
 
-ACCOUNT_ID = os.getenv("CF_ACCOUNT_ID")
-AUTH_EMAIL = os.getenv("CLOUDFLARE_EMAIL")
-AUTH_KEY = os.getenv("CLOUDFLARE_API_KEY")
+def block_sender(pattern, pattern_type, case_number):
+    # Cloudflare handles regex internally — NO regex flag needed
+    is_regex = False
 
-if not ACCOUNT_ID or not AUTH_EMAIL or not AUTH_KEY:
-    print("Missing required environment variables in .env.")
-    sys.exit(1)
+    comment = f"{datetime.utcnow().strftime('%Y/%m/%d')} - {case_number}"
 
-# -----------------------------------------------------------
-# API BASE + SESSION
-# -----------------------------------------------------------
+    body = {
+        "pattern": pattern,
+        "pattern_type": pattern_type,
+        "is_regex": is_regex,
+        "comments": comment
+    }
 
-SETTINGS_BASE = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/email-security/settings"
+    # -----------------------------------------------------------
+    # SEND API REQUEST
+    # -----------------------------------------------------------
 
-session = requests.Session()
-session.headers.update({
-    "X-Auth-Email": AUTH_EMAIL,
-    "X-Auth-Key": AUTH_KEY,
-    "Content-Type": "application/json"
-})
+    url = f"{SETTINGS_BASE}/block_senders"
 
-# -----------------------------------------------------------
-# USER INPUTS
-# -----------------------------------------------------------
+    last_exc = None
+    for attempt in range(CFG.MAX_RETRIES):
+        try:
+            print(f"Making request to {url}")
+            resp = CFG.session.post(url, json=body, timeout=CFG.TIMEOUT)
+            print(resp)
+        except requests.RequestException as e:
+            last_exc = e
+            time.sleep((2 ** attempt) * 0.5)
+            continue
 
-pattern = input("Enter sender / domain / IP to block: ").strip()
-if not pattern:
-    print("No pattern entered. Exiting.")
-    sys.exit(1)
+        if resp.status_code == 201:
+            try:
+                data = resp.json()
+            except Exception:
+                data = {}
+            result = data.get("result")
+            return result
 
-case_number = input("Enter case number: ").strip()
-if not case_number:
-    print("No case number entered. Exiting.")
-    sys.exit(1)
+        if resp.status_code in (429, 500, 502, 503, 504):
+            time.sleep((2 ** attempt) * 0.5 + CFG.RATE_LIMIT_SLEEP)
+            last_exc = Exception(f"Transient HTTP {resp.status_code}")
+            continue
 
-print("\nChoose pattern type:")
-print("  1 = EMAIL   (example: user@example.com)")
-print("  2 = DOMAIN  (example: badsite.com)")
-print("  3 = IP      (example: 192.168.1.10)")
-print("  4 = UNKNOWN (rare — only if unsure)")
+        raise Exception(f"API error {resp.status_code}: {resp.text}")
 
-ptype = input("Enter 1, 2, 3, or 4: ").strip()
+    raise last_exc if last_exc else Exception("Unknown request failure")
 
-if ptype == "1":
-    pattern_type = "EMAIL"
-elif ptype == "2":
-    pattern_type = "DOMAIN"
-elif ptype == "3":
-    pattern_type = "IP"
-elif ptype == "4":
-    pattern_type = "UNKNOWN"
-else:
-    print("Invalid choice. Defaulting to EMAIL.")
-    pattern_type = "EMAIL"
 
-# Cloudflare handles regex internally — NO regex flag needed
-is_regex = False
 
-comment = f"{datetime.utcnow().strftime('%Y/%m/%d')} - {case_number}"
+       
 
-body = {
-    "pattern": pattern,
-    "pattern_type": pattern_type,
-    "is_regex": is_regex,
-    "comments": comment
-}
 
-# -----------------------------------------------------------
-# SEND API REQUEST
-# -----------------------------------------------------------
+if __name__ == "__main__":
+    # -----------------------------------------------------------
+    # USER INPUTS
+    # -----------------------------------------------------------
 
-url = f"{SETTINGS_BASE}/block_senders"
-resp = session.post(url, json=body, timeout=10)
+    pattern = input("Enter sender / domain / IP to block: ").strip()
+    if not pattern:
+        print("No pattern entered. Exiting.")
+        sys.exit(1)
 
-if resp.status_code not in (200, 201):
-    print("\n❌ Failed to create blocked sender:")
-    print(resp.text)
-    sys.exit(1)
+    case_number = input("Enter case number: ").strip()
+    if not case_number:
+        print("No case number entered. Exiting.")
+        sys.exit(1)
 
-result = resp.json().get("result")
+    print("\nChoose pattern type:")
+    print("  1 = EMAIL   (example: user@example.com)")
+    print("  2 = DOMAIN  (example: badsite.com)")
+    print("  3 = IP      (example: 192.168.1.10)")
+    print("  4 = UNKNOWN (rare — only if unsure)")
 
-# -----------------------------------------------------------
-# OUTPUT
-# -----------------------------------------------------------
+    ptype = input("Enter 1, 2, 3, or 4: ").strip()
 
-print("\n✅ Block created successfully!")
-print("------------------------------")
-print(f"Pattern     : {result.get('pattern')}")
-print(f"Type        : {result.get('pattern_type')}")
-print(f"Is Regex    : {result.get('is_regex')}")
-print(f"Comments    : {result.get('comments')}")
-print(f"Created ID  : {result.get('id')}")
-print("------------------------------")
+    if ptype == "1":
+        pattern_type = "EMAIL"
+    elif ptype == "2":
+        pattern_type = "DOMAIN"
+    elif ptype == "3":
+        pattern_type = "IP"
+    elif ptype == "4":
+        pattern_type = "UNKNOWN"
+    else:
+        print("Invalid choice. Defaulting to EMAIL.")
+        pattern_type = "EMAIL"
+
+    result= block_sender(pattern, ptype, case_number)
+
+    # -----------------------------------------------------------
+    # OUTPUT
+    # -----------------------------------------------------------
+
+    print("\n✅ Block created successfully!")
+    print("------------------------------")
+    print(f"Pattern     : {result.get('pattern')}")
+    print(f"Type        : {result.get('pattern_type')}")
+    print(f"Is Regex    : {result.get('is_regex')}")
+    print(f"Comments    : {result.get('comments')}")
+    print(f"Created ID  : {result.get('id')}")
+    print("------------------------------")

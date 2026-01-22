@@ -12,58 +12,15 @@ from pathlib import Path
 import time
 import json
 import csv
-import os
 import re
 import uuid
 import requests
-from dotenv import load_dotenv
 
-# ---------------------------
-# CONFIG / TUNABLES
-# ---------------------------
-env_path = Path(__file__).resolve().parent / ".env"
-if env_path.exists():
-    load_dotenv(dotenv_path=env_path)
 
-ACCOUNT_ID = os.getenv("CF_ACCOUNT_ID")
-AUTH_EMAIL = os.getenv("CLOUDFLARE_EMAIL")
-AUTH_KEY = os.getenv("CLOUDFLARE_API_KEY")
+import CFScriptConfig as CFG
 
-if not all((ACCOUNT_ID, AUTH_EMAIL, AUTH_KEY)):
-    raise EnvironmentError("Missing CF_ACCOUNT_ID or CLOUDFLARE_EMAIL or CLOUDFLARE_API_KEY in environment or .env")
 
-API_BASE_URL = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/email-security/investigate"
-
-API_MAX_PER_PAGE = 1000
-PER_PAGE = 1000      # Cloudflare limit
-TIMEOUT = 90
-MAX_RETRIES = 5
-SLEEP_BETWEEN_REQUESTS = 0.05
-RATE_LIMIT_SLEEP = 1.0
-
-# Safety caps
-MAX_TOTAL_REQUESTS = 200000
-MAX_RECURSION_DEPTH = 40
-
-# Chunking settings
-MIN_CHUNK_SECONDS = 0.001   # 1 ms
-MICRO_SUBSLICES = 10
-
-# Debug & checkpoint folder
-DEBUG_DIR = Path.cwd() / "debug"
-DEBUG_DIR.mkdir(exist_ok=True)
-MSGID_PROGRESS = DEBUG_DIR / "msgid_progress.json"
-
-# Default delay between each message-id query (no prompt)
-DELAY_BETWEEN_IDS = 0.2
-
-# HTTP session
-session = requests.Session()
-session.headers.update({
-    "Accept": "application/json",
-    "X-Auth-Email": AUTH_EMAIL,
-    "X-Auth-Key": AUTH_KEY
-})
+SEARCH_URL = CFG.API_BASE_URL+ "/investigate"
 
 # ---------------------------
 # Helpers (unchanged / reused)
@@ -102,7 +59,7 @@ def _get_record_id(rec):
 
 def _save_debug_response(resp, params, url, note=None):
     try:
-        fname = DEBUG_DIR / f"resp_{int(time.time()*1000)}_{uuid.uuid4().hex[:6]}.json"
+        fname = CFG.DEBUG_DIR / f"resp_{int(time.time()*1000)}_{uuid.uuid4().hex[:6]}.json"
         try:
             body = resp.json() if resp is not None else None
         except Exception:
@@ -143,7 +100,7 @@ def _extract_cursor_from_next(next_val):
 # ---------------------------
 # Single page fetch with retries + debug (shared)
 # ---------------------------
-def _fetch_page(start_iso=None, end_iso=None, subject=None, sender=None, domain=None, query=None, per_page=PER_PAGE):
+def _fetch_page(start_iso=None, end_iso=None, subject=None, sender=None, recipient=None, domain=None, query=None, per_page=CFG.PER_PAGE):
     params = {"per_page": per_page, "detections_only": "false"}
     if start_iso:
         params["start"] = start_iso
@@ -159,17 +116,21 @@ def _fetch_page(start_iso=None, end_iso=None, subject=None, sender=None, domain=
             params["sender"] = sender
         if domain:
             params["domain"] = domain
+        if recipient:
+            params["recipient"] = recipient
+
+    print(params)
 
     last_exc = None
-    for attempt in range(MAX_RETRIES):
+    for attempt in range(CFG.MAX_RETRIES):
         try:
-            resp = session.get(API_BASE_URL, params=params, timeout=TIMEOUT)
+            resp = CFG.session.get(SEARCH_URL, params=params, timeout=CFG.TIMEOUT)
         except requests.RequestException as e:
             last_exc = e
             time.sleep((2 ** attempt) * 0.5)
             continue
 
-        _save_debug_response(resp, params, API_BASE_URL, note=f"attempt_{attempt}")
+        _save_debug_response(resp, params, SEARCH_URL, note=f"attempt_{attempt}")
 
         if resp.status_code == 200:
             try:
@@ -187,7 +148,7 @@ def _fetch_page(start_iso=None, end_iso=None, subject=None, sender=None, domain=
             ri = data.get("result_info") or {}
             return page_results, len(page_results), ri
         if resp.status_code in (429, 500, 502, 503, 504):
-            time.sleep((2 ** attempt) * 0.5 + RATE_LIMIT_SLEEP)
+            time.sleep((2 ** attempt) * 0.5 + CFG.RATE_LIMIT_SLEEP)
             last_exc = Exception(f"Transient HTTP {resp.status_code}")
             continue
         raise Exception(f"API error {resp.status_code}: {resp.text}")
@@ -196,7 +157,7 @@ def _fetch_page(start_iso=None, end_iso=None, subject=None, sender=None, domain=
 # ---------------------------
 # Message-ID fetch (pages through server results) - reused
 # ---------------------------
-def fetch_by_message_id(message_id, per_page=PER_PAGE, preserve_duplicates=True):
+def fetch_by_message_id(message_id, per_page=CFG.PER_PAGE, preserve_duplicates=True):
     if not message_id:
         return [], {"requests_made": 0, "completed": True, "reason": "no_message_id"}
 
@@ -214,18 +175,18 @@ def fetch_by_message_id(message_id, per_page=PER_PAGE, preserve_duplicates=True)
         if cursor:
             params_query["cursor"] = cursor
         last_exc = None
-        for attempt in range(MAX_RETRIES):
+        for attempt in range(CFG.MAX_RETRIES):
             try:
-                resp = session.get(API_BASE_URL, params=params_query, timeout=TIMEOUT)
+                resp = CFG.session.get(SEARCH_URL, params=params_query, timeout=CFG.TIMEOUT)
             except requests.RequestException as e:
                 last_exc = e
                 time.sleep((2 ** attempt) * 0.5)
                 continue
-            _save_debug_response(resp, params_query, API_BASE_URL, note=f"msgid_attempt_{attempt}")
+            _save_debug_response(resp, params_query, SEARCH_URL, note=f"msgid_attempt_{attempt}")
             if resp.status_code == 200:
                 break
             if resp.status_code in (429, 500, 502, 503, 504):
-                time.sleep((2 ** attempt) * 0.5 + RATE_LIMIT_SLEEP)
+                time.sleep((2 ** attempt) * 0.5 + CFG.RATE_LIMIT_SLEEP)
                 last_exc = Exception(f"Transient HTTP {resp.status_code}")
                 continue
             raise Exception(f"API error {resp.status_code}: {resp.text}")
@@ -263,7 +224,7 @@ def fetch_by_message_id(message_id, per_page=PER_PAGE, preserve_duplicates=True)
         next_cursor = _extract_cursor_from_next(next_val)
         if next_cursor:
             cursor = next_cursor
-            time.sleep(SLEEP_BETWEEN_REQUESTS)
+            time.sleep(CFG.SLEEP_BETWEEN_REQUESTS)
             continue
         break
 
@@ -273,7 +234,7 @@ def fetch_by_message_id(message_id, per_page=PER_PAGE, preserve_duplicates=True)
 # ---------------------------
 # Deterministic divide-and-conquer fetcher (unchanged)
 # ---------------------------
-def fetch_all_by_time_divide_and_conquer(start_iso, end_iso, subject=None, sender=None, domain=None, query=None, per_page=PER_PAGE):
+def fetch_all_by_time_divide_and_conquer(start_iso, end_iso, subject=None, sender=None, recipient=None, domain=None, query=None, per_page=CFG.PER_PAGE):
     start_dt = _parse_iso_to_dt_or_none(start_iso)
     end_dt = _parse_iso_to_dt_or_none(end_iso)
     if not start_dt or not end_dt:
@@ -288,7 +249,7 @@ def fetch_all_by_time_divide_and_conquer(start_iso, end_iso, subject=None, sende
         nonlocal requests_made, aborted
         if aborted:
             return
-        if requests_made >= MAX_TOTAL_REQUESTS:
+        if requests_made >= CFG.MAX_TOTAL_REQUESTS:
             aborted = True
             print("[abort] reached MAX_TOTAL_REQUESTS")
             return
@@ -296,10 +257,10 @@ def fetch_all_by_time_divide_and_conquer(start_iso, end_iso, subject=None, sende
             return
 
         chunk_seconds = (e_dt - s_dt).total_seconds()
-        if depth > MAX_RECURSION_DEPTH:
-            print(f"[warn] max recursion depth ({MAX_RECURSION_DEPTH}) reached; fetching once: {s_dt} -> {e_dt}")
+        if depth > CFG.MAX_RECURSION_DEPTH:
+            print(f"[warn] max recursion depth ({CFG.MAX_RECURSION_DEPTH}) reached; fetching once: {s_dt} -> {e_dt}")
             try:
-                page, plen, ri = _fetch_page(_iso(s_dt), _iso(e_dt), subject=subject, sender=sender, domain=domain, query=query, per_page=per_page)
+                page, plen, ri = _fetch_page(_iso(s_dt), _iso(e_dt), subject=subject, sender=sender, recipient=recipient, domain=domain, query=query, per_page=per_page)
                 requests_made += 1
             except Exception as ex:
                 print("[error] request failed at max depth:", ex)
@@ -313,7 +274,7 @@ def fetch_all_by_time_divide_and_conquer(start_iso, end_iso, subject=None, sende
             return
 
         try:
-            page, plen, ri = _fetch_page(_iso(s_dt), _iso(e_dt), subject=subject, sender=sender, domain=domain, query=query, per_page=per_page)
+            page, plen, ri = _fetch_page(_iso(s_dt), _iso(e_dt), subject=subject, sender=sender, recipient=recipient, domain=domain, query=query, per_page=per_page)
             requests_made += 1
         except Exception as ex:
             print("[error] request failed:", ex)
@@ -331,12 +292,12 @@ def fetch_all_by_time_divide_and_conquer(start_iso, end_iso, subject=None, sende
         if plen < per_page:
             return
 
-        if chunk_seconds <= MIN_CHUNK_SECONDS:
-            delta = (e_dt - s_dt) / MICRO_SUBSLICES
+        if chunk_seconds <= CFG.MIN_CHUNK_SECONDS:
+            delta = (e_dt - s_dt) / CFG.MICRO_SUBSLICES
             if delta.total_seconds() <= 0:
                 print("[warn] cannot split tiny chunk further; accepting current results from this chunk")
                 return
-            for i in range(MICRO_SUBSLICES):
+            for i in range(CFG.MICRO_SUBSLICES):
                 a = s_dt + delta * i
                 b = s_dt + delta * (i + 1)
                 _recurse(a, b, depth + 1)
@@ -447,20 +408,20 @@ def read_message_id_csv(path):
     return ids
 
 def load_msgid_progress():
-    if MSGID_PROGRESS.exists():
+    if CFG.MSGID_PROGRESS.exists():
         try:
-            return json.loads(MSGID_PROGRESS.read_text(encoding="utf-8"))
+            return json.loads(CFG.MSGID_PROGRESS.read_text(encoding="utf-8"))
         except Exception:
             return {"done_ids": [], "index": 0}
     return {"done_ids": [], "index": 0}
 
 def save_msgid_progress(progress_obj):
     try:
-        MSGID_PROGRESS.write_text(json.dumps(progress_obj, indent=2, default=str), encoding="utf-8")
+        CFG.MSGID_PROGRESS.write_text(json.dumps(progress_obj, indent=2, default=str), encoding="utf-8")
     except Exception as e:
         print("[debug] failed to write progress:", e)
 
-def process_message_id_file(in_csv_path, out_csv_path, delay_between_ids=DELAY_BETWEEN_IDS):
+def process_message_id_file(in_csv_path, out_csv_path, delay_between_ids=CFG.DELAY_BETWEEN_IDS):
     # graceful handling of missing file
     in_path = Path(in_csv_path)
     if not in_path.exists():
@@ -489,7 +450,7 @@ def process_message_id_file(in_csv_path, out_csv_path, delay_between_ids=DELAY_B
         mid = ids[idx]
         print(f"[batch] ({idx+1}/{len(ids)}) fetching message id: {mid}")
         try:
-            page_items, meta = fetch_by_message_id(mid, per_page=PER_PAGE, preserve_duplicates=True)
+            page_items, meta = fetch_by_message_id(mid, per_page=CFG.PER_PAGE, preserve_duplicates=True)
         except Exception as e:
             print(f"[error] failed to fetch {mid}: {e}")
             progress["index"] = idx
@@ -509,7 +470,7 @@ def process_message_id_file(in_csv_path, out_csv_path, delay_between_ids=DELAY_B
     ok, written = export_csv_and_validate(out_csv_path, collected_all)
     if ok:
         try:
-            MSGID_PROGRESS.unlink()
+            CFG.MSGID_PROGRESS.unlink()
         except Exception:
             pass
         print(f"[success] batch CSV exported to {out_csv_path} with {written} rows.")
@@ -534,7 +495,7 @@ def prompt_run():
         if not message_id:
             print("No Message ID provided.")
             return
-        items, meta = fetch_by_message_id(message_id, per_page=PER_PAGE, preserve_duplicates=True)
+        items, meta = fetch_by_message_id(message_id, per_page=CFG.PER_PAGE, preserve_duplicates=True)
         print(f"[done] message-id fetch collected {len(items)} items; meta={meta}")
     elif choice == "3":
         in_csv = input("Path to CSV file containing Message IDs: ").strip()
@@ -552,7 +513,7 @@ def prompt_run():
             out_csv = str(p)
 
         # use default delay (no prompt per your request)
-        delay_between = DELAY_BETWEEN_IDS
+        delay_between = CFG.DELAY_BETWEEN_IDS
         ok, written = process_message_id_file(in_csv, out_csv, delay_between_ids=delay_between)
         return
     else:
@@ -571,8 +532,8 @@ def prompt_run():
         start_iso = _iso(start_dt)
         end_iso = _iso(end_dt)
 
-        print(f"[search] start={start_iso} end={end_iso} per_page={PER_PAGE}")
-        items, meta = fetch_all_by_time_divide_and_conquer(start_iso, end_iso, subject=subject, sender=sender, domain=domain, query=query, per_page=PER_PAGE)
+        print(f"[search] start={start_iso} end={end_iso} per_page={CFG.PER_PAGE}")
+        items, meta = fetch_all_by_time_divide_and_conquer(start_iso, end_iso, subject=subject, sender=sender, domain=domain, query=query, per_page=CFG.PER_PAGE)
         print(f"[done] collected {len(items)} items; meta={meta}")
 
     default_csv = Path.cwd() / f"cf_investigate_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.csv"

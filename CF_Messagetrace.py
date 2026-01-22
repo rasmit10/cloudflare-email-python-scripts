@@ -5,46 +5,29 @@ Created on Thu Dec  4 11:18:04 2025
 @author: rasmit10
 """
 
-
-import os
 import sys
 import json
-from pathlib import Path
-from dotenv import load_dotenv
 import requests
 
-# ---- config (you can edit if not using .env) ----
-TIMEOUT = 15  # seconds
-# -------------------------------------------------
+import CFScriptConfig as CFG
 
-# Load .env from script directory
-here = Path(__file__).resolve().parent
-load_dotenv(here / ".env")
-
-ACCOUNT_ID = os.getenv("CF_ACCOUNT_ID")
-AUTH_EMAIL = os.getenv("CLOUDFLARE_EMAIL")
-AUTH_KEY = os.getenv("CLOUDFLARE_API_KEY")
-
-if not (ACCOUNT_ID and AUTH_EMAIL and AUTH_KEY):
-    print("Missing env vars. Ensure .env contains CF_ACCOUNT_ID, CLOUDFLARE_EMAIL, CLOUDFLARE_API_KEY")
-    sys.exit(1)
 
 POSTFIX_ID = input("Enter postfix_id: ").strip()
 if not POSTFIX_ID:
     print("No postfix_id entered. Exiting.")
     sys.exit(0)
 
-url = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/email-security/investigate/{POSTFIX_ID}/trace"
+url = CFG.API_BASE_URL + f"/investigate/{POSTFIX_ID}/trace"
 headers = {
-    "X-Auth-Email": AUTH_EMAIL,
-    "X-Auth-Key": AUTH_KEY,
+    "X-Auth-Email": CFG.AUTH_EMAIL,
+    "X-Auth-Key": CFG.AUTH_KEY,
     "Accept": "application/json",
 }
 
 print(f"\nRequesting trace for {POSTFIX_ID}...\n")
 
 try:
-    resp = requests.get(url, headers=headers, timeout=TIMEOUT)
+    resp = requests.get(url, headers=headers, timeout=CFG.TIMEOUT)
 except requests.RequestException as e:
     print("Request error:", e)
     sys.exit(1)

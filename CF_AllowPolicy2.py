@@ -5,37 +5,24 @@
 Cloudflare Allow Policy Search by Email and Domain
 """
 
-import os
+
 import re
-from pathlib import Path
-from dotenv import load_dotenv
 import requests
 
+import CFScriptConfig as CFG
 # -----------------------------------------------------------
 # CONFIG – CHANGE THESE ONLY
 # -----------------------------------------------------------
 SEARCH_EMAIL = None  # set to None to search by domain
 SEARCH_DOMAIN = "universitydesigninstitute.ccsend.com"                # e.g. "example.com"
 
-PER_PAGE = 100
-
 # -----------------------------------------------------------
-# LOAD ENVIRONMENT
+# API BASE + SESSION
 # -----------------------------------------------------------
-env_path = Path(__file__).resolve().parent / ".env"
-load_dotenv(dotenv_path=env_path)
-
-ACCOUNT_ID = os.getenv("CF_ACCOUNT_ID")
-AUTH_EMAIL = os.getenv("CLOUDFLARE_EMAIL")
-AUTH_KEY = os.getenv("CLOUDFLARE_API_KEY")
-
-if not all([ACCOUNT_ID, AUTH_EMAIL, AUTH_KEY]):
-    raise EnvironmentError("Missing CF_ACCOUNT_ID or CLOUDFLARE_EMAIL or CLOUDFLARE_API_KEY in .env")
-
-BASE_URL = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/email-security/settings/allow_policies"
+url = CFG.API_BASE_URL + "/settings/allow_policies"
 HEADERS = {
-    "X-Auth-Email": AUTH_EMAIL,
-    "X-Auth-Key": AUTH_KEY,
+    "X-Auth-Email": CFG.AUTH_EMAIL,
+    "X-Auth-Key": CFG.AUTH_KEY,
     "Accept": "application/json",
 }
 
@@ -60,14 +47,14 @@ def fetch_allow_policies():
     session.headers.update(HEADERS)
 
     while True:
-        r = session.get(BASE_URL, params={"page": page, "per_page": PER_PAGE}, timeout=30)
+        r = session.get(url, params={"page": page, "per_page": CFG.PER_PAGE}, timeout=30)
         r.raise_for_status()
         data = r.json()
         results = data.get("result", [])
         if not results:
             break
         policies.extend(results)
-        if len(results) < PER_PAGE:
+        if len(results) < CFG.PER_PAGE:
             break
         page += 1
 

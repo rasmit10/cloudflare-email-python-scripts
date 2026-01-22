@@ -5,49 +5,34 @@
 Cloudflare Domain Check
 """
 
-import os
-from pathlib import Path
-from dotenv import load_dotenv
 import requests
 from typing import List, Dict, Any
+
+import CFSearchConfig as CFG
 
 # ---------------------------
 # CONFIG — edit this (IDE)
 # ---------------------------
 SEARCH_DOMAIN = "azte.com"   # set to domain you want to check (e.g. "example.com")
-PER_PAGE = 100
 
-# ---------------------------
-# LOAD ENVIRONMENT
-# ---------------------------
-env_path = Path(__file__).resolve().parent / ".env"
-load_dotenv(dotenv_path=env_path)
-
-ACCOUNT_ID = os.getenv("CF_ACCOUNT_ID")
-AUTH_EMAIL = os.getenv("CLOUDFLARE_EMAIL")
-AUTH_KEY = os.getenv("CLOUDFLARE_API_KEY")
-
-if not all([ACCOUNT_ID, AUTH_EMAIL, AUTH_KEY]):
-    raise EnvironmentError("Missing CF_ACCOUNT_ID or CLOUDFLARE_EMAIL or CLOUDFLARE_API_KEY in .env")
-
-BASE_URL = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/email-security/settings/domains"
+url = CFG.API_BASE_URL + f"/settings/domains"
 HEADERS = {
-    "X-Auth-Email": AUTH_EMAIL,
-    "X-Auth-Key": AUTH_KEY,
+    "X-Auth-Email": CFG.AUTH_EMAIL,
+    "X-Auth-Key": CFG.AUTH_KEY,
     "Accept": "application/json",
 }
 
 # ---------------------------
 # Fetch all domains (paged)
 # ---------------------------
-def fetch_all_domains(per_page: int = PER_PAGE) -> List[Dict[str, Any]]:
+def fetch_all_domains(per_page: int = CFG.PER_PAGE) -> List[Dict[str, Any]]:
     session = requests.Session()
     session.headers.update(HEADERS)
     page = 1
     all_items: List[Dict[str, Any]] = []
 
     while True:
-        resp = session.get(BASE_URL, params={"per_page": per_page, "page": page}, timeout=30)
+        resp = session.get(url, params={"per_page": per_page, "page": page}, timeout=30)
         resp.raise_for_status()
         data = resp.json()
         items = data.get("result") or []
@@ -93,7 +78,7 @@ def main():
         raise ValueError("Set SEARCH_DOMAIN at top of script to the domain you want to check (e.g. 'example.com').")
 
     sd = SEARCH_DOMAIN.strip().lower()
-    print(f"[info] fetching configured domains for account {ACCOUNT_ID} ...")
+    print(f"[info] fetching configured domains for account {CFG.ACCOUNT_ID} ...")
     try:
         domains = fetch_all_domains()
     except Exception as e:

@@ -4,46 +4,36 @@ Created on Tue Dec  2 15:14:49 2025
 
 @author: rasmit10
 """
-
-from dotenv import load_dotenv
-from pathlib import Path
-import os
 import requests
 
-# -----------------------------------------------------------
-# LOAD ENVIRONMENT
-# -----------------------------------------------------------
+import CFScriptConfig as CFG
 
-env_path = Path(__file__).resolve().parent / ".env"
-load_dotenv(dotenv_path=env_path)
+def reclassify_message(postfix_id, disposition):
+    VALID_DISPOSITIONS=["NONE", "BULK", "MALICIOUS", "SPAM", "SPOOF", "SUSPICIOUS"]
+    
+    if(not disposition.upper() in VALID_DISPOSITIONS):
+        print("[error] invalid disposition provided. Disposition needs to be one of the following: NONE | BULK | MALICIOUS | SPAM | SPOOF | SUSPICIOUS")
+        return None
+        
+    url = CFG.API_BASE_URL + f"/investigate/{postfix_id}/reclassify"
 
-ACCOUNT_ID = os.getenv("CF_ACCOUNT_ID")
-AUTH_EMAIL = os.getenv("CLOUDFLARE_EMAIL")
-AUTH_KEY = os.getenv("CLOUDFLARE_API_KEY")
-if not all([ACCOUNT_ID, AUTH_EMAIL, AUTH_KEY]):
-    raise EnvironmentError("Missing CF_ACCOUNT_ID or CLOUDFLARE_EMAIL or CLOUDFLARE_API_KEY in .env")
+    body = {
+        "expected_disposition": disposition.upper()
+    }
 
-POSTFIX_ID = "4dSd1n3JVjz16PyJ"         # <-- change this
-DISPOSITION = "MALICIOUS"                    # NONE | BULK | MALICIOUS | SPAM | SPOOF | SUSPICIOUS
+    headers = {
+        "X-Auth-Email": CFG.AUTH_EMAIL,
+        "X-Auth-Key": CFG.AUTH_KEY,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    print(f"Making request to {url} with body {body}")
+    r = CFG.session.post(url, json=body, timeout=CFG.TIMEOUT)
+    return r
 
-url = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/email-security/investigate/{POSTFIX_ID}/reclassify"
+if __name__ == "__main__":
+    POSTFIX_ID = "4dSd1n3JVjz16PyJ"         # <-- change this
+    DISPOSITION = "MALICIOUS"                    # NONE | BULK | MALICIOUS | SPAM | SPOOF | SUSPICIOUS
 
-body = {
-    "account_id": ACCOUNT_ID,
-    "expected_disposition": DISPOSITION
-}
-
-headers = {
-    "X-Auth-Email": AUTH_EMAIL,
-    "X-Auth-Key": AUTH_KEY,
-    "Content-Type": "application/json",
-    "Accept": "application/json",
-}
-
-
-
-r = requests.post(url, headers=headers, json=body)
-print(r.json())
-print("URL:", url)
-print("Request headers:", headers)
-print("Body:", body)
+    r = reclassify_message(POSTFIX_ID, DISPOSITION)
+    print(r.json())
