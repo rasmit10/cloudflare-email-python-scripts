@@ -206,10 +206,6 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-<<<<<<< HEAD
-# Socks Stuff
-=======
 #Socks's Environment stuff
->>>>>>> 4d5d50766baf043b04742afbfa1a7251b02712ca
 Cloudflare_VENV/
 debug/
