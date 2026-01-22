@@ -11,24 +11,10 @@ Fetch raw EML for one Cloudflare postfix_id
 """
 
 import requests
-from dotenv import load_dotenv
-from pathlib import Path
-import os
 import sys
 
-# -----------------------------------------------------------
-# LOAD ENVIRONMENT (.env must contain CF_ACCOUNT_ID, CLOUDFLARE_EMAIL, CLOUDFLARE_API_KEY)
-# -----------------------------------------------------------
-env_path = Path(__file__).resolve().parent / ".env"
-load_dotenv(env_path)
+import CFSCriptConfig as CFG
 
-ACCOUNT_ID = os.getenv("CF_ACCOUNT_ID")
-AUTH_EMAIL = os.getenv("CLOUDFLARE_EMAIL")
-AUTH_KEY = os.getenv("CLOUDFLARE_API_KEY")
-
-if not ACCOUNT_ID or not AUTH_EMAIL or not AUTH_KEY:
-    print("Missing required environment variables in .env file.")
-    sys.exit(1)
 
 # -----------------------------------------------------------
 # USER INPUT — one postfix ID
@@ -43,11 +29,11 @@ if not POSTFIX_ID:
 # -----------------------------------------------------------
 # API REQUEST
 # -----------------------------------------------------------
-url = f"https://api.cloudflare.com/client/client/v4/accounts/{ACCOUNT_ID}/email-security/investigate/{POSTFIX_ID}/raw"
+url = CFG.API_BASE_URL + f"/investigate/{POSTFIX_ID}/raw"
 
 headers = {
-    "X-Auth-Email": AUTH_EMAIL,
-    "X-Auth-Key": AUTH_KEY,
+    "X-Auth-Email": CFG.AUTH_EMAIL,
+    "X-Auth-Key": CFG.AUTH_KEY,
     "Accept": "message/rfc822",   # asks for raw EML
 }
 

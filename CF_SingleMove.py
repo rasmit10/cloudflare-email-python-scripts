@@ -9,19 +9,7 @@ import requests
 from dotenv import load_dotenv
 from pathlib import Path
 
-# -----------------------------------------------------------
-# LOAD ENVIRONMENT
-# -----------------------------------------------------------
-
-env_path = Path(__file__).resolve().parent / ".env"
-load_dotenv(env_path)
-
-ACCOUNT_ID = os.getenv("CF_ACCOUNT_ID")
-AUTH_EMAIL = os.getenv("CLOUDFLARE_EMAIL")
-AUTH_KEY = os.getenv("CLOUDFLARE_API_KEY")
-
-API_BASE_URL = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/email-security/investigate"
-TIMEOUT = 10
+import CFScriptConfig as CFG
 
 # -----------------------------------------------------------
 # MOVE MESSAGE
@@ -41,17 +29,17 @@ def move_message(postfix_id: str, destination: str):
     if destination not in VALID_DESTINATIONS:
         raise ValueError(f"Invalid destination. Must be one of: {sorted(VALID_DESTINATIONS)}")
 
-    url = f"{API_BASE_URL}/{postfix_id}/move"
+    url = CFG.API_BASE_URL + f"investigate/{postfix_id}/move"
     body = {"destination": destination}
 
     headers = {
-        "X-Auth-Email": AUTH_EMAIL,
-        "X-Auth-Key": AUTH_KEY,
+        "X-Auth-Email": CFG.AUTH_EMAIL,
+        "X-Auth-Key": CFG.AUTH_KEY,
         "Content-Type": "application/json",
     }
 
     try:
-        response = requests.post(url, json=body, headers=headers, timeout=TIMEOUT)
+        response = requests.post(url, json=body, headers=headers, timeout=CFG.TIMEOUT)
     except requests.RequestException as e:
         return {"success": False, "error": f"Request failed: {e}"}
 
