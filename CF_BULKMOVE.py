@@ -4,7 +4,6 @@ Created on Thu Dec  4 09:00:35 2025
 
 Cloudflare BULK MOVE
 
-@author: rasmit10
 """
 
 import time
@@ -30,7 +29,7 @@ def read_postfix_id_csv(path):
     if not path.exists():
         raise FileNotFoundError(path)
     ids = []
-    with open(path, newline="", encoding="utf-8") as cf:
+    with open(path, newline="", encoding="utf-8-sig") as cf:
         reader = csv.reader(cf)
         rows = list(reader)
     if not rows:
@@ -54,74 +53,94 @@ def read_postfix_id_csv(path):
     return ids
 
 def bulk_move(destination, in_file, out_file):
-    url = CFG.API_BASE_URL + "/investigate"
+    url = CFG.API_BASE_URL + "/investigate/move"
     
     # Read postfix IDs
     postfix_ids = read_postfix_id_csv(in_file)
 
     print(f"Loaded {len(postfix_ids)} postfix IDs")
 
+    # ---------------------------
+    # Batch Purge Processing
+    # ---------------------------
+    batch_size = 100 
+    batch_count = 0
+    failed_batches = []   # Track failed batches for retry attempts
+    items = []
 
-    # Prepare CSV output
-    fieldnames = ["postfix_id", "http_status", "success", "error", "raw_response"]
-    with open(out_file, "w", newline="") as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writeheader()
+    # Iterate through postfix IDs in chunks of batch_size
+    for i in range(0, len(postfix_ids), batch_size):
+        batch_count += 1
+        batch = postfix_ids[i:i + batch_size]
 
-        # Process each ID one-by-one
-        for postfix_id in postfix_ids:
-            print(f"Moving {postfix_id} → {destination} ... ")
+        print(f"Moving batch {batch_count} to {destination}...")
 
-            url = f"{url}/{postfix_id}/move"
-            body = {"destination": destination}
+        body = {
+        "destination": destination,
+        "postfix_ids": batch
+        }
 
-            success = ""
-            error_msg = ""
-            data = {}
+        # Send purge request
+        response = CFG.session.post(url, json=body, timeout=CFG.TIMEOUT)
 
-            for attempt in range(CFG.MAX_RETRIES):
-                print(f'Attempt {attempt} ... ', end=" ")
-                response = CFG.session.post(url, json=body, timeout=CFG.TIMEOUT)
+        if response:
+            print(f"Batch {batch_count} moved!")
+        if "result" in response.json():
+            for item in response.json()["result"]:
+                items.append(item) # store purge results per message
+        else:
+            failed_batches.append(batch_count - 1)  # store failed batch index
+            print(f"Problem with batch {batch_count} - {response.text}")
 
-                if response.status_code == 200:
-                    try:
-                        data = response.json()
-                    except:
-                        data = {"error": "Non-JSON response", "raw": response.text}
+    # ---------------------------
+    # Retry Logic For Failed Batches
+    # ---------------------------
 
-                    success = data.get("success", False)
-                    error_msg = None
-                    print("OK\n")
+    if len(failed_batches) > 0:
+        print("\nRetrying failed batches...")
 
-                    # Cloudflare may return errors inside 'errors'
-                    if isinstance(data, dict) and "errors" in data and data["errors"]:
-                        error_msg = json.dumps(data["errors"])
-                        time.sleep((2 ** attempt) * 0.5 + CFG.RATE_LIMIT_SLEEP)
-                        continue
-                    if success:
-                        break
-                elif response.status_code in (404, 422):
-                    print(f"FAILED: {response.status_code} - permanent failure, no retry.")
-                    error_msg = f"{response.status_code} - permanent failure, no retry."
-                    break   
-                else:
-                    print(f"FAILED: {response.status_code}")
-                    time.sleep((2 ** attempt) * 0.5 + CFG.RATE_LIMIT_SLEEP)
-                    continue
+        for failure in failed_batches:
+            print(f"Retrying batch {failure + 1}")
 
-                
-                
+        # Extract the same batch again
+        retry_batch = postfix_ids[failure * batch_size : (failure + 1) * batch_size]
 
-            # Write row
-            writer.writerow({
-                "postfix_id": postfix_id,
-                "http_status": response.status_code,
-                "success": success,
-                "error": error_msg,
-                "raw_response": json.dumps(data)
-            })
+        # Retry each postfix_id individually
+        for id in retry_batch:
+            body = {
+            "destination": destination,
+            "postfix_ids": [id]
+            }
 
-    print(f"\nDone! Results written to {out_file}")
+            result, response = CFG.session.post(url, json=body, timeout=CFG.TIMEOUT)
+
+            if result:
+                print(f"Retry postfix_id {id} moved!")
+            if "result" in response.json():
+                for item in response.json()["result"]:
+                    items.append(item)
+            else:
+                print(f"Problem with postfix_id {item} - {response.text}")
+
+    # If there were "successful" purges, record the results
+    if len(items) > 0:
+        print(f"Saving move results to {out_file}")
+
+        fieldnames = [
+        "completed_timestamp", "success", "message_id", 
+        "recipient", "operation", "status", "destination"
+        ]
+
+        # Write purge results to CSV
+        with open(out_file, "w", newline='', encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=fieldnames, extrasaction='ignore')
+            writer.writeheader()
+            writer.writerows(items)
+            print(f"Results saved to {out_file}")
+
+    else:
+        print("No successful moves happened!")
+        
 
 if __name__ == "__main__":
     bulk_move(DESTINATION, INPUT_FILE, OUTPUT_FILE)

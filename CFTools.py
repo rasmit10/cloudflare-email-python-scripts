@@ -137,7 +137,7 @@ if __name__ == "__main__":
     move_parser = subparser.add_parser('move', help='Move a list of messages to a different folder.')
     move_parser.set_defaults(func=arg_move)
     move_parser.add_argument('-d', '--destination', action='store', dest="destination", choices=["Inbox", "JunkEmail", "DeletedItems", "RecoverableItemsDeletions", "RecoverableItemsPurges"], help='The destination folder to move the messages to. Options: Inbox | JunkEmail | DeletedItems | RecoverableItemsDeletions | RecoverableItemsPurges', required=True)
-    move_parser.add_argument('-i', '--input_file', action='store', dest='input_file', help='The path of the input CSV, should contain one column with the postfix IDs and no other information.', required=True)
+    move_parser.add_argument('-i', '--input_file', action='store', dest='input_file', help='The path of the input CSV.', required=True)
     move_parser.add_argument('-o', '--output_file', action='store', dest='output_file', help="The file path to output the results csv to. Default is move_results.csv", default="move_results.csv")
 
     #define test parser and add arguments
