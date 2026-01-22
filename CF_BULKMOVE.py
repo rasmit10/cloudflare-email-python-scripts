@@ -6,11 +6,8 @@ Cloudflare BULK MOVE
 
 """
 
-import time
 import csv
-import json
 from pathlib import Path
-
 import CFScriptConfig as CFG
 
 

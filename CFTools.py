@@ -96,9 +96,6 @@ def arg_reclassify(args):
 def arg_move(args):
     CFBulkMove.bulk_move(args.destination, args.input_file, args.output_file)
 
-def arg_test(args):
-    ids = CFBulkMove.read_postfix_id_csv(args.input)
-    print(ids)
 
 
 if __name__ == "__main__":
@@ -139,11 +136,6 @@ if __name__ == "__main__":
     move_parser.add_argument('-d', '--destination', action='store', dest="destination", choices=["Inbox", "JunkEmail", "DeletedItems", "RecoverableItemsDeletions", "RecoverableItemsPurges"], help='The destination folder to move the messages to. Options: Inbox | JunkEmail | DeletedItems | RecoverableItemsDeletions | RecoverableItemsPurges', required=True)
     move_parser.add_argument('-i', '--input_file', action='store', dest='input_file', help='The path of the input CSV.', required=True)
     move_parser.add_argument('-o', '--output_file', action='store', dest='output_file', help="The file path to output the results csv to. Default is move_results.csv", default="move_results.csv")
-
-    #define test parser and add arguments
-    test_parser = subparser.add_parser('test', help='Used for testing functions before putting them into prod.')
-    test_parser.set_defaults(func=arg_test)
-    test_parser.add_argument('-i', action='store', dest='input')
 
     #parse arguments and run the correct function
     args = parser.parse_args()
