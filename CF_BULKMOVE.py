@@ -21,7 +21,7 @@ OUTPUT_FILE = "outputfile.csv" #<---change this
 
 # -----------------------------
 
-def read_postfix_id_csv(path):
+def read_postfix_id_csv(path): # type: ignore
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(path)
@@ -121,6 +121,14 @@ def bulk_move(destination, in_file, out_file):
 
     # If there were "successful" purges, record the results
     if len(items) > 0:
+        num_successes = 0
+        for item in items:
+            if item['status'] == 'OK':
+                num_successes += 1
+        
+        print(f"Successfully moved {num_successes}/{len(items)} messages.")
+
+
         print(f"Saving move results to {out_file}")
 
         fieldnames = [
