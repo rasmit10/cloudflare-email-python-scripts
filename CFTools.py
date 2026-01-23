@@ -82,16 +82,13 @@ def arg_block(args):
 # ---------------------------
 def arg_reclassify(args):
     #reclassify a message
-    if(not args.disposition or not args.postfix):
+    if(not args.disposition):
         print("\n[error] postifx and disposition are required to reclassify a message. Run \'CFTools.py reclassify -h\' for help.")
         return
     
-    res = CFReclass.reclassify_message(args.postfix, args.disposition.upper())
+    CFReclass.reclassify_message(input_file=args.input_file, num_submissions=args.number_of_successes, postfix_id=args.postfix, disposition=args.disposition.upper())
     
-    if(res.status_code == 202):
-        print(f'\n[success] message submitted with disposition: {args.disposition}')
-    else:
-        print(res)
+    
 
 def arg_move(args):
     CFBulkMove.bulk_move(args.destination, args.input_file, args.output_file)
@@ -127,8 +124,10 @@ if __name__ == "__main__":
     #define reclassify parser and arguments
     reclassify_parser = subparser.add_parser('reclassify', help='Submit a message to Cloudflare for reclassification.')
     reclassify_parser.set_defaults(func=arg_reclassify)
-    reclassify_parser.add_argument('-p', "--postfix", action='store', dest='postfix', help='The postix ID of the message.', required=True)
-    reclassify_parser.add_argument('-d', '--disposition', action='store', dest='disposition', choices=['none', 'bulk', 'malicious', 'spam', 'spoof', 'suspicious'], help='The desired disposition of a message. Options: NONE | BULK | MALICIOUS | SPAM | SPOOF | SUSPICIOUS', required=True)
+    reclassify_parser.add_argument('-p', "--postfix", action='store', dest='postfix', help='The postix ID of the message.')
+    reclassify_parser.add_argument('-i', '--input_file', action='store', dest='input_file', help='The path to the input csv file. If used, submission attempts will be made until X successful submissions are made.')
+    reclassify_parser.add_argument('-n', '--number_of_successes', action='store', dest='number_of_successes', default=2, help='The number of successful submissions required when bulk processing using an input file. Default: 2')
+    reclassify_parser.add_argument('-d', '--disposition', action='store', dest='disposition', choices=['none', 'bulk', 'malicious', 'spam', 'spoof', 'suspicious'], help='The desired disposition of a message. Options: none | bulk | malicious | spam | spoof | suspicious', required=True)
 
     #define move parser and add arguments
     move_parser = subparser.add_parser('move', help='Move a list of messages to a different folder.')
