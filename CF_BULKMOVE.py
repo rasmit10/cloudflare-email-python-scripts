@@ -76,7 +76,7 @@ def bulk_move(destination, in_file, out_file):
 
     print(f"Loaded {len(postfix_ids)} postfix IDs")
 
-    batch_size = 10
+    batch_size = 100
     failed_batches = []   # store batch start indices for retries
     items = []
 
