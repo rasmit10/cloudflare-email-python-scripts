@@ -91,7 +91,18 @@ def arg_reclassify(args):
     
 
 def arg_move(args):
-    CFBulkMove.bulk_move(args.destination, args.input_file, args.output_file)
+    if not any((args.postfix, args.input_file)):
+        print("[error] either a postifx id or input csv is required.")
+        return
+    
+    if args.input_file:
+        CFBulkMove.bulk_move(args.destination, args.input_file, args.output_file)
+    elif args.postfix:
+        response = CFBulkMove.single_move(args.postfix, args.destination)
+        if response.status_code == 200:
+            print(f"[success] moved {args.postfix} to {args.destination}")
+        else:
+            print(f"[error] failed to move message with error {response.status_code}")
 
 
 
@@ -133,8 +144,9 @@ if __name__ == "__main__":
     move_parser = subparser.add_parser('move', help='Move a list of messages to a different folder.')
     move_parser.set_defaults(func=arg_move)
     move_parser.add_argument('-d', '--destination', action='store', dest="destination", choices=["Inbox", "JunkEmail", "DeletedItems", "RecoverableItemsDeletions", "RecoverableItemsPurges"], help='The destination folder to move the messages to. Options: Inbox | JunkEmail | DeletedItems | RecoverableItemsDeletions | RecoverableItemsPurges', required=True)
-    move_parser.add_argument('-i', '--input_file', action='store', dest='input_file', help='The path of the input CSV.', required=True)
+    move_parser.add_argument('-i', '--input_file', action='store', dest='input_file', help='The path of the input CSV.')
     move_parser.add_argument('-o', '--output_file', action='store', dest='output_file', help="The file path to output the results csv to. Default is move_results.csv", default="move_results.csv")
+    move_parser.add_argument('-p', '--postifx', action='store', dest='postfix', help='The postifx ID of a single email to move.')
 
     #parse arguments and run the correct function
     args = parser.parse_args()

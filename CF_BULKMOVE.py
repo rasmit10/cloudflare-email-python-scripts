@@ -21,6 +21,14 @@ INPUT_FILE = r"inputfile.csv " #<---change this
 OUTPUT_FILE = "outputfile.csv" #<---change this
 
 # -----------------------------
+def single_move(postfix_id, destination):
+    
+    url = f"{CFG.API_BASE_URL}/investigate/{postfix_id}/move"
+    body = {"destination": destination}
+
+    response = CFG.session.post(url, json=body, timeout=CFG.TIMEOUT)
+    return response
+
 
 def read_postfix_id_csv(path): # type: ignore
     path = Path(path)
@@ -138,9 +146,8 @@ def bulk_move(destination, in_file, out_file):
 
             # Retry each postfix_id individually
             for pid in retry_batch:
-                body = {"destination": destination, "postfix_ids": [pid]}
                 try:
-                    response = CFG.session.post(url, json=body, timeout=CFG.TIMEOUT)
+                    response = single_move(pid, destination)
                 except Exception as e:
                     print(f"HTTP request failed for postfix_id {pid}: {e}")
                     continue
