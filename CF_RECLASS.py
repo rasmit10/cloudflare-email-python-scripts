@@ -38,7 +38,7 @@ def read_postfix_id_csv(path): # pyright: ignore[reportMissingParameterType]
             ids.append(v)
     return ids
 
-def reclassify_message(input_file=None, num_submissions=None, postfix_id=None, disposition=None):
+def reclassify_message(postfix_id=None, disposition=None):
     VALID_DISPOSITIONS=["NONE", "BULK", "MALICIOUS", "SPAM", "SPOOF", "SUSPICIOUS"]
     
     if(not disposition.upper() in VALID_DISPOSITIONS):
@@ -48,38 +48,42 @@ def reclassify_message(input_file=None, num_submissions=None, postfix_id=None, d
     body = {
         "expected_disposition": disposition.upper()
     }  
+    url = CFG.API_BASE_URL + f"/investigate/{postfix_id}/reclassify"
     
+    print(f"Making request to {url} with body {body}")
+    r = CFG.session.post(url, json=body, timeout=CFG.TIMEOUT)
 
-    if postfix_id:
-        url = CFG.API_BASE_URL + f"/investigate/{postfix_id}/reclassify"
-        
+    if(r.status_code == 202):
+        print(f'\n[success] message submitted with disposition: {disposition}')
+    else:
+        print(r)
 
-        print(f"Making request to {url} with body {body}")
+def bulk_reclassify(input_file, num_submissions, disposition):
+    postfix_ids = read_postfix_id_csv(input_file)
+    num_successes = 0
+    successful_ids = []
+    
+    body = {
+        "expected_disposition": disposition.upper()
+    }  
+
+    for id in postfix_ids:
+        url = CFG.API_BASE_URL + f"/investigate/{id}/reclassify"
         r = CFG.session.post(url, json=body, timeout=CFG.TIMEOUT)
-
-        if(r.status_code == 202):
-            print(f'\n[success] message submitted with disposition: {disposition}')
+        if r.status_code == 202:
+            num_successes += 1
+            successful_ids.append(id)
+            print(f"message {id} resubmitted as {disposition}. {num_successes}/{num_submissions} completed.")
         else:
-            print(r)
-    
-    if input_file:
-        postfix_ids = read_postfix_id_csv(input_file)
-        num_successes = 0
-        successful_ids = []
-
-        for id in postfix_ids:
-            url = CFG.API_BASE_URL + f"/investigate/{id}/reclassify"
-            r = CFG.session.post(url, json=body, timeout=CFG.TIMEOUT)
-            if r.status_code == 202:
-                num_successes += 1
-                successful_ids.append(id)
-                print(f"message {id} resubmitted as {disposition}. {num_successes}/{num_submissions} completed.")
-            else:
-                print(f"failed to resubmit {id} with error {r.json()["errors"][0]["code"]}")
-            
-            if num_successes >= int(num_submissions):
-                print(f"[success] reclassified {successful_ids} as {disposition}")
-                break
+            print(f"failed to resubmit {id} with error {r.json()["errors"][0]["code"]}")
+        
+        if num_successes >= int(num_submissions):
+            print(f"[success] reclassified {successful_ids} as {disposition}")
+            break
+    if num_successes > 0:
+        print(f"[partial success] reclassified {successful_ids} as {disposition}. {num_submissions} of desired {num_submissions} mesasges were submitted.")
+    else:
+        print("[error] no messages are able to be submitted. Consider uploading a .eml file via the GUI.")
 
 if __name__ == "__main__":
     POSTFIX_ID = "4dSd1n3JVjz16PyJ"         # <-- change this

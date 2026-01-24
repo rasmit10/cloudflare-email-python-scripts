@@ -85,8 +85,14 @@ def arg_reclassify(args):
     if(not args.disposition):
         print("\n[error] postifx and disposition are required to reclassify a message. Run \'CFTools.py reclassify -h\' for help.")
         return
+    if not any((args.postfix, args.input_file)):
+        print("\n[error] either a postfix ID or input file is required. Run \'CFTools.py reclassify -h\' for help.")
+        return
     
-    CFReclass.reclassify_message(input_file=args.input_file, num_submissions=args.number_of_successes, postfix_id=args.postfix, disposition=args.disposition.upper())
+    if args.postfix:
+        CFReclass.reclassify_message(args.postfix, args.disposition.upper())
+    elif args.input_file:
+        CFReclass.bulk_reclassify(args.input_file, args.number_of_successes, args.disposition)
     
     
 
