@@ -69,13 +69,9 @@ def arg_block(args):
 
     res = {}
     if args.sender:
-        res = CFBlock.block_sender(args.sender, "EMAIL", args.case_number)
+        CFBlock.block_sender(args.sender, "EMAIL", args.case_number)
     elif args.domain:
-        res = CFBlock.block_sender(args.domain, "DOMAIN", args.case_number)
-
-    
-    print(f"\n[success] added {res['pattern']} to block list with comment {res['comments']}.")
-    return
+        CFBlock.block_sender(args.domain, "DOMAIN", args.case_number)
 
 # ---------------------------
 # Submit a reclassification using arguments

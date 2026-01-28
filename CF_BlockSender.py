@@ -27,7 +27,14 @@ def block_sender(pattern, pattern_type, case_number):
     # Cloudflare handles regex internally — NO regex flag needed
     is_regex = False
 
-    comment = f"{datetime.utcnow().strftime('%Y/%m/%d')} - {case_number}"
+    if case_number.isdigit():
+        sir = "SIR" + case_number
+    else:
+        sir = case_number
+
+    comment = f"{datetime.utcnow().strftime('%Y/%m/%d')} - {sir}"
+
+    print(f"Comment: {comment}")
 
     body = {
         "pattern": pattern,
@@ -59,7 +66,16 @@ def block_sender(pattern, pattern_type, case_number):
             except Exception:
                 data = {}
             result = data.get("result")
-            return result
+            print(f"\n[success] added {result['pattern']} to block list with comment {result['comments']}.")
+            return
+        elif resp.status_code == 400:
+            try:
+                data = resp.json()
+            except Exception:
+                data = {}
+            if data["errors"][0]["code"] == 4102:
+                print("[error] pattern already blocked")
+                return
 
         if resp.status_code in (429, 500, 502, 503, 504):
             time.sleep((2 ** attempt) * 0.5 + CFG.RATE_LIMIT_SLEEP)
