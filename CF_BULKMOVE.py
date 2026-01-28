@@ -84,7 +84,7 @@ def bulk_move(destination, in_file, out_file):
 
     print(f"Loaded {len(postfix_ids)} postfix IDs")
 
-    batch_size = 100
+    batch_size = 50
     failed_batches = []   # store batch start indices for retries
     items = []
 
@@ -99,7 +99,7 @@ def bulk_move(destination, in_file, out_file):
         }
 
         try:
-            response = CFG.session.post(url, json=body)
+            response = CFG.session.post(url, json=body, timeout=(CFG.TIMEOUT * 2))
         except Exception as e:
             print(f"HTTP request failed for batch {batch_num}: {e}")
             failed_batches.append(start)
