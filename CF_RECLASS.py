@@ -59,13 +59,16 @@ def reclassify_message(postfix_id=None, disposition=None):
         print(r)
 
 def bulk_reclassify(input_file, num_submissions, disposition):
-    postfix_ids = read_postfix_id_csv(input_file)
-    num_successes = 0
-    successful_ids = []
-    
     body = {
         "expected_disposition": disposition.upper()
     }  
+    
+    num_successes = 0
+    successful_ids = []
+    postfix_ids = read_postfix_id_csv(input_file)
+
+    print(f"Loaded {len(postfix_ids)} ids to reclassify. Submitting until {num_submissions} are successful. Expect a lot of errors.")
+
 
     for id in postfix_ids:
         url = CFG.API_BASE_URL + f"/investigate/{id}/reclassify"
