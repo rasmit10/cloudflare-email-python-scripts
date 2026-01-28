@@ -122,19 +122,25 @@ def bulk_move(destination, in_file, out_file):
                 print(f"Batch {batch_num} returned status {response.status_code}")
 
         # If we have JSON and it contains "result", gather items
-        if parsed and isinstance(parsed, dict) and "result" in parsed:
-            result = parsed["result"]
-            if isinstance(result, list):
-                items.extend(result)
-            else:
-                print(f"Batch {batch_num} result field is not a list: {type(result)}")
+        result = None
+        if parsed and isinstance(parsed, dict):
+            result = parsed.get("result", None)
+
+        if isinstance(result, list):
+            items.extend(result)
+        elif result is not None:
+            # result exists but is not a list
+            print(f"Batch {batch_num} result field is not a list: {type(result)}; content: {str(result)[:500]}")
         else:
-            # If status indicates failure, mark for retry
+            # No result found in parsed JSON (could be None because of 204 or empty body)
             if response.status_code not in (200, 201, 204):
                 failed_batches.append(start)
                 print(f"Problem with batch {batch_num} - {response.text[:1000]}")
+            else:
+                # success but no result payload — that's acceptable for some APIs
+                print(f"Batch {batch_num} succeeded with no 'result' payload.")
 
-        time.sleep(CFG.RATE_LIMIT_SLEEP)
+        time.sleep(2)
 
     # Retry logic for failed_batches
     if failed_batches:
@@ -161,10 +167,17 @@ def bulk_move(destination, in_file, out_file):
                 if response.status_code in (200, 201, 204):
                     print(f"Retry postfix_id {pid} moved! status={response.status_code}")
 
-                if parsed and isinstance(parsed, dict) and "result" in parsed:
-                    for item in parsed["result"]:
+                # Safely extract result list if present
+                result = None
+                if parsed and isinstance(parsed, dict):
+                    result = parsed.get("result", None)
+
+                if isinstance(result, list):
+                    for item in result:
                         items.append(item)
-            time.sleep(CFG.RATE_LIMIT_SLEEP)
+                elif result is not None:
+                    print(f"Retry postfix_id {pid} result field unexpected type: {type(result)}; content: {str(result)[:500]}")
+                time.sleep(2)
 
     # Summarize and write output if any items
     if items:
@@ -187,5 +200,3 @@ def bulk_move(destination, in_file, out_file):
 
 if __name__ == "__main__":
     bulk_move(DESTINATION, INPUT_FILE, OUTPUT_FILE)
-
-
