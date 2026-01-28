@@ -34,7 +34,8 @@ def arg_search(args):
         print(f"[search] start={start_iso} end={end_iso} per_page={CFG.PER_PAGE}")
         items, meta = CFSearch.fetch_all_by_time_divide_and_conquer(start_iso, end_iso, subject=args.subject, sender=args.sender, recipient=args.recipient, domain=args.domain, query=args.query, per_page=CFG.PER_PAGE)
         print(f"[done] collected {len(items)} items; meta={meta}")
-    
+
+
     # items returned by search
     if len(items) > 0:
         # parse output path cf_investigate_timestamp.csv
@@ -51,10 +52,20 @@ def arg_search(args):
         ok, written = CFSearch.export_csv_and_validate(out_csv, items)
         if ok:
             print(f"\n[success] CSV exported to {out_csv} with {written} rows (matches collected count).")
-            return
         else:
             print(f"\n[warning] CSV exported to {out_csv} with {written} rows (MAY NOT MATCH collected count {len(items)}). See debug/ for diagnostics.")
-            return
+
+        if args.filter_output:
+            default_filtered_out_path = Path.cwd() / f"cf_delivered_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.csv"
+            if not args.filtered_out_path:
+                filtered_out_csv = str(default_filtered_out_path)
+            else:
+                fp = Path(args.filtered_out_path).expanduser()
+                if not fp.suffix:
+                    fp = fp.with_suffix('.csv')
+                filtered_out_csv = str(fp)
+
+            CFSearch.filter_for_delivered_emails_and_output(filtered_out_csv, items)
     else:
         print("\n[success] Search returned 0 results. No CSV output to write.")
         return
@@ -124,6 +135,8 @@ if __name__ == "__main__":
     search_parser.add_argument('-d', '--domain', action='store', dest='domain', default=None, help='The sender domain.')
     search_parser.add_argument('--query', action='store', dest='query', default=None, help='A more advanced query to search for, analogous to the keyword search in the GUI')
     search_parser.add_argument('-o','--out', action='store', dest='out', default=None, help='The output filepath for the query results.')
+    search_parser.add_argument('-f', '--filter_output', action='store_true', dest='filter_output', help='Parse and output an additonal CSV file with only the emails that were delivered to a purgable inbox. True/False flag.')
+    search_parser.add_argument('--filter_out', action='store', dest='filtered_out_path', help='The file path to output the filtered query results to.')
 
 
     #define block parser and arguments

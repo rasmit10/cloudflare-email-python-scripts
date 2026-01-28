@@ -319,6 +319,30 @@ def fetch_all_by_time_divide_and_conquer(start_iso, end_iso, subject=None, sende
 # ---------------------------
 # Flatten + CSV export (unchanged)
 # ---------------------------
+def filter_for_delivered_emails_and_output(path, emails):
+    delivered_emails = []
+
+    for email in emails:
+        if email["is_quarantined"] == False:
+            for recipient in email["client_recipients"]:
+                if recipient.endswith(('@exchange.asu.edu', '@email.asu.edu', '@mainex1.asu.edu')):
+                    delivered_emails.append(email)
+                    break
+
+    if len(delivered_emails) > 0:
+        ok, written = export_csv_and_validate(path, delivered_emails)
+        if ok:
+            print(f"\n[success] CSV exported to {path} with {written} rows (matches collected count).")
+            return
+        else:
+            print(f"\n[warning] CSV exported to {path} with {written} rows (MAY NOT MATCH collected count {len(delivered_emails)}). See debug/ for diagnostics.")
+            return
+    else:
+        print("No emails delivered to purgable inboxes. Writing csv skipped.")
+
+# ---------------------------
+# Flatten + CSV export (unchanged)
+# ---------------------------
 def flatten_record(rec, parent_key="", out=None):
     if out is None:
         out = {}
